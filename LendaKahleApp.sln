@@ -1,0 +1,33 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36518.9 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "lendakahleapp.client", "lendakahleapp.client\lendakahleapp.client.esproj", "{ABB9C526-0858-6F53-54C3-E334B80D0583}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LendaKahleApp.Server", "LendaKahleApp.Server\LendaKahleApp.Server.csproj", "{12D90265-BB32-4BEE-BC42-C4F4DD850214}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{ABB9C526-0858-6F53-54C3-E334B80D0583}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ABB9C526-0858-6F53-54C3-E334B80D0583}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ABB9C526-0858-6F53-54C3-E334B80D0583}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{ABB9C526-0858-6F53-54C3-E334B80D0583}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ABB9C526-0858-6F53-54C3-E334B80D0583}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ABB9C526-0858-6F53-54C3-E334B80D0583}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{12D90265-BB32-4BEE-BC42-C4F4DD850214}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{12D90265-BB32-4BEE-BC42-C4F4DD850214}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{12D90265-BB32-4BEE-BC42-C4F4DD850214}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{12D90265-BB32-4BEE-BC42-C4F4DD850214}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2C1A26F9-5355-44D5-9DB1-D6AF29A68908}
+	EndGlobalSection
+EndGlobal

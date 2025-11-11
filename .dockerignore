@@ -1,0 +1,39 @@
+# .dockerignore for Render.com deployment
+# Ignore frontend files (deployed separately on Vercel)
+lendakahleapp.client/
+
+# Ignore development files
+**/.vs/
+**/.vscode/
+**/bin/
+**/obj/
+**/*.user
+**/*.suo
+
+# Ignore documentation
+*.md
+!README.md
+
+# Ignore git
+.git/
+.gitignore
+.gitattributes
+
+# Ignore node_modules if any exist in server project
+**/node_modules/
+
+# Ignore test files
+**/*.Tests/
+**/*Test*.cs
+
+# Ignore local environment files
+**/.env.local
+**/.env.development
+
+# Ignore uploads directory content (but keep folder structure)
+**/uploads/**/*
+!**/uploads/.gitkeep
+
+# Ignore PowerShell and batch scripts
+**/*.ps1
+**/*.bat

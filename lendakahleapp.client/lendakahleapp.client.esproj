@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.VisualStudio.JavaScript.Sdk/1.0.784122">
+  <PropertyGroup>
+    <StartupCommand>npm run dev</StartupCommand>
+    <JavaScriptTestFramework>Jasmine</JavaScriptTestFramework>
+    <ShouldRunBuildScript>false</ShouldRunBuildScript>
+    <BuildCommand>
+    </BuildCommand>
+    <ProductionBuildCommand>
+    </ProductionBuildCommand>
+  </PropertyGroup>
+  <ItemGroup>
+    <Folder Include="src\context\" />
+  </ItemGroup>
+</Project>
