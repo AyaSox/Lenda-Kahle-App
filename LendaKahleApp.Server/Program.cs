@@ -11,12 +11,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using LendaKahleApp.Server.Configuration;
-using Hangfire.PostgreSql; // added
+using Hangfire.PostgreSql;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 // Bind LendingRules configuration
 builder.Services.Configure<LendingRules>(builder.Configuration.GetSection("LendingRules"));
 
@@ -65,15 +64,31 @@ builder.Services.AddHangfire(config =>
     config.UsePostgreSqlStorage(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddHangfireServer();
 
-// CORS
+// CORS - Environment-aware configuration
+var corsOrigins = builder.Configuration.GetSection("CORS:AllowedOrigins").Get<string[]>() 
+    ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("LendaKahleCors", policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+        policy.WithOrigins(corsOrigins)
+              .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+              .WithHeaders("Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With")
+              .AllowCredentials()
+              .WithExposedHeaders("Content-Disposition");
     });
+
+    // Development-only policy
+    if (builder.Environment.IsDevelopment())
+    {
+        options.AddPolicy("Development", policy =>
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        });
+    }
 });
 
 // Configure file upload size limit (30MB)
@@ -86,8 +101,6 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
 });
 
 builder.Services.AddControllers();
-
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -121,7 +134,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseCors("AllowAll");
+// Use environment-appropriate CORS policy
+app.UseCors(app.Environment.IsDevelopment() ? "Development" : "LendaKahleCors");
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -132,7 +146,17 @@ app.MapControllers();
 app.MapHub<NotificationsHub>("/hubs/notifications");
 
 // Hangfire Dashboard
-app.UseHangfireDashboard("/hangfire");
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = Array.Empty<Hangfire.Dashboard.IDashboardAuthorizationFilter>()
+    });
+}
+else
+{
+    app.UseHangfireDashboard("/hangfire");
+}
 
 app.MapFallbackToFile("/index.html");
 
