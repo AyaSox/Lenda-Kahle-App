@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using LendaKahleApp.Server.Configuration;
+using Hangfire.PostgreSql; // added
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,9 +20,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Bind LendingRules configuration
 builder.Services.Configure<LendingRules>(builder.Configuration.GetSection("LendingRules"));
 
-// Database
+// Database (PostgreSQL)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
@@ -59,9 +60,9 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 // SignalR
 builder.Services.AddSignalR();
 
-// Hangfire
+// Hangfire (PostgreSQL storage)
 builder.Services.AddHangfire(config =>
-    config.UseSqlServerStorage(builder.Configuration.GetConnectionString("DefaultConnection")));
+    config.UsePostgreSqlStorage(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddHangfireServer();
 
 // CORS
@@ -75,13 +76,13 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Configure file upload size limit (30MB - optimal for performance)
+// Configure file upload size limit (30MB)
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = 31457280; // 30MB
     options.ValueLengthLimit = 31457280; // 30MB
     options.MultipartHeadersLengthLimit = 16384;
-    options.MemoryBufferThreshold = 4 * 1024 * 1024; // 4MB buffer before writing to disk
+    options.MemoryBufferThreshold = 4 * 1024 * 1024; // 4MB
 });
 
 builder.Services.AddControllers();
@@ -130,18 +131,8 @@ app.MapControllers();
 // SignalR hubs
 app.MapHub<NotificationsHub>("/hubs/notifications");
 
-// Hangfire Dashboard (no auth in dev - add auth in production!)
-if (app.Environment.IsDevelopment())
-{
-    app.UseHangfireDashboard("/hangfire", new DashboardOptions
-    {
-        Authorization = Array.Empty<Hangfire.Dashboard.IDashboardAuthorizationFilter>()
-    });
-}
-else
-{
-    app.UseHangfireDashboard("/hangfire"); // Uses default auth in production
-}
+// Hangfire Dashboard
+app.UseHangfireDashboard("/hangfire");
 
 app.MapFallbackToFile("/index.html");
 
