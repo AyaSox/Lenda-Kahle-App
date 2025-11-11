@@ -31,7 +31,7 @@ namespace LendaKahleApp.Server.Data
                 e.HasData(new SystemSettings { Id = 1, MaxLoanAmount = 100000m, MaxLoanTermMonths = 60, UpdatedAt = DateTime.UtcNow });
             });
 
-            // AspNetUsers configuration
+            // AspNetUsers configuration with global query filter
             builder.Entity<ApplicationUser>(entity =>
             {
                 entity.Property(u => u.CreatedDate)
@@ -57,6 +57,9 @@ namespace LendaKahleApp.Server.Data
                 entity.Property(l => l.TotalInterest).HasPrecision(18, 2);
                 entity.Property(l => l.TotalFees).HasPrecision(18, 2);
 
+                // Query filter to exclude loans from soft-deleted users
+                entity.HasQueryFilter(l => !l.Borrower.IsDeleted);
+
                 // Composite index for common queries
                 entity.HasIndex(e => new { e.BorrowerId, e.Status })
                     .HasDatabaseName("IX_Loans_BorrowerId_Status");
@@ -66,33 +69,45 @@ namespace LendaKahleApp.Server.Data
             {
                 entity.Property(r => r.Amount).HasPrecision(18, 2);
 
+                // Query filter to exclude repayments for loans from soft-deleted users
+                entity.HasQueryFilter(r => !r.Loan.Borrower.IsDeleted);
+
                 // Composite index for reporting
                 entity.HasIndex(r => new { r.LoanId, r.PaymentDate })
                     .HasDatabaseName("IX_Repayments_LoanId_PaymentDate");
             });
 
-            // LoanDocuments indexes
+            // LoanDocuments with query filter
             builder.Entity<LoanDocument>(entity =>
             {
+                // Query filter to exclude documents for loans from soft-deleted users
+                entity.HasQueryFilter(d => !d.Loan.Borrower.IsDeleted);
+
                 entity.HasIndex(d => new { d.LoanId, d.DocumentType })
                     .HasDatabaseName("IX_LoanDocuments_LoanId_DocumentType");
             });
 
-            // AuditLogs indexes
+            // AuditLogs indexes (no filter needed - we want to keep audit trail)
             builder.Entity<AuditLog>(entity =>
             {
                 entity.HasIndex(a => new { a.Timestamp, a.Action })
                     .HasDatabaseName("IX_AuditLogs_Timestamp_Action");
             });
 
-            // Notifications indexes
+            // Notifications configuration
             builder.Entity<Notification>(entity =>
             {
+                // Configure relationship to ApplicationUser
+                entity.HasOne<ApplicationUser>()
+                      .WithMany()
+                      .HasForeignKey(n => n.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
                 entity.HasIndex(n => new { n.UserId, n.IsRead })
                     .HasDatabaseName("IX_Notifications_UserId_IsRead");
             });
 
-            // AffordabilityAssessment
+            // AffordabilityAssessment with query filter
             builder.Entity<AffordabilityAssessment>(entity =>
             {
                 entity.Property(a => a.MonthlyGrossIncome).HasPrecision(18, 2);
@@ -104,13 +119,19 @@ namespace LendaKahleApp.Server.Data
                 entity.Property(a => a.OtherExpenses).HasPrecision(18, 2);
                 entity.Property(a => a.TotalMonthlyExpenses).HasPrecision(18, 2);
 
+                // Query filter to exclude assessments for loans from soft-deleted users
+                entity.HasQueryFilter(a => !a.Loan.Borrower.IsDeleted);
+
                 entity.HasIndex(a => a.LoanId)
                     .HasDatabaseName("IX_AffordabilityAssessments_LoanId");
             });
 
-            // CreditCheck
+            // CreditCheck with query filter
             builder.Entity<CreditCheck>(entity =>
             {
+                // Query filter to exclude credit checks for loans from soft-deleted users
+                entity.HasQueryFilter(c => !c.Loan.Borrower.IsDeleted);
+
                 entity.HasIndex(c => c.LoanId)
                     .HasDatabaseName("IX_CreditChecks_LoanId");
             });
