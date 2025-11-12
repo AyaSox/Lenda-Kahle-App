@@ -343,6 +343,129 @@ namespace LendaKahleApp.Server.Controllers
             }
         }
 
+        [HttpPost("verify-account")]
+        public async Task<IActionResult> VerifyAccount([FromBody] VerifyAccountDto model)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new { 
+                        success = false,
+                        message = "Please provide both email and first name.",
+                        errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)
+                    });
+                }
+
+                var user = await _userManager.FindByEmailAsync(model.Email);
+                
+                if (user == null)
+                {
+                    _logger.LogWarning("Password reset verification failed - email not found: {Email}", model.Email);
+                    
+                    // Return generic message to prevent email enumeration
+                    return Unauthorized(new { 
+                        success = false,
+                        message = "Account verification failed. Please check your information and try again."
+                    });
+                }
+
+                // Verify First Name (case-insensitive)
+                bool nameMatches = string.Equals(user.FirstName, model.FirstName, StringComparison.OrdinalIgnoreCase);
+
+                if (!nameMatches)
+                {
+                    _logger.LogWarning("Password reset verification failed for {Email} - first name mismatch", model.Email);
+                    
+                    return Unauthorized(new { 
+                        success = false,
+                        message = "Account verification failed. The first name provided does not match our records."
+                    });
+                }
+
+                // Generate password reset token
+                var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+                
+                _logger.LogInformation("Account verified for {Email}. Password reset token generated.", model.Email);
+
+                return Ok(new { 
+                    success = true,
+                    message = $"Welcome back, {user.FirstName}! You can now reset your password.",
+                    token = token,
+                    email = model.Email
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during account verification for {Email}", model?.Email);
+                return StatusCode(500, new { 
+                    success = false,
+                    message = "An error occurred during verification.",
+                    error = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto model)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new { 
+                        success = false,
+                        message = "Please provide all required fields.",
+                        errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)
+                    });
+                }
+
+                var user = await _userManager.FindByEmailAsync(model.Email);
+                
+                if (user == null)
+                {
+                    return BadRequest(new { 
+                        success = false,
+                        message = "Invalid password reset request."
+                    });
+                }
+
+                // Reset password using the token
+                var result = await _userManager.ResetPasswordAsync(user, model.Token, model.NewPassword);
+                
+                if (!result.Succeeded)
+                {
+                    var errors = result.Errors.Select(e => e.Description).ToList();
+                    
+                    _logger.LogWarning("Password reset failed for {Email}. Errors: {Errors}", 
+                        model.Email, string.Join(", ", errors));
+
+                    return BadRequest(new { 
+                        success = false,
+                        message = "Password reset failed. The token may have expired or is invalid.",
+                        errors = errors
+                    });
+                }
+
+                _logger.LogInformation("Password reset successfully for {Email}", model.Email);
+
+                return Ok(new { 
+                    success = true,
+                    message = "Password reset successfully! You can now login with your new password.",
+                    email = model.Email
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during password reset for {Email}", model?.Email);
+                return StatusCode(500, new { 
+                    success = false,
+                    message = "An error occurred while resetting your password.",
+                    error = ex.Message
+                });
+            }
+        }
+
         private async Task<string> GenerateJwtToken(ApplicationUser user)
         {
             var roles = await _userManager.GetRolesAsync(user);
