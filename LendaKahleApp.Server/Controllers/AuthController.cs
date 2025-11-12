@@ -38,7 +38,11 @@ namespace LendaKahleApp.Server.Controllers
             {
                 if (!ModelState.IsValid)
                 {
-                    return BadRequest(ModelState);
+                    return BadRequest(new { 
+                        success = false,
+                        message = "Invalid registration data",
+                        errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)
+                    });
                 }
 
                 var user = new ApplicationUser
@@ -58,7 +62,11 @@ namespace LendaKahleApp.Server.Controllers
 
                 if (!result.Succeeded)
                 {
-                    return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
+                    return BadRequest(new { 
+                        success = false,
+                        message = "Registration failed",
+                        errors = result.Errors.Select(e => e.Description) 
+                    });
                 }
 
                 // Add default "User" role
@@ -66,12 +74,33 @@ namespace LendaKahleApp.Server.Controllers
 
                 _logger.LogInformation("User {Email} registered successfully", model.Email);
 
-                return Ok(new { message = "Registration successful" });
+                // Generate JWT token for immediate login
+                var token = await GenerateJwtToken(user);
+                var roles = await _userManager.GetRolesAsync(user);
+
+                // Return success response with token and user data
+                return Ok(new { 
+                    success = true,
+                    message = "Registration successful! Welcome to Lenda Kahle.",
+                    token = token,
+                    user = new
+                    {
+                        id = user.Id,
+                        email = user.Email,
+                        firstName = user.FirstName,
+                        lastName = user.LastName,
+                        roles = roles
+                    }
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during registration for {Email}", model.Email);
-                return StatusCode(500, new { message = "An error occurred during registration", error = ex.Message });
+                return StatusCode(500, new { 
+                    success = false,
+                    message = "An error occurred during registration", 
+                    error = ex.Message 
+                });
             }
         }
 
