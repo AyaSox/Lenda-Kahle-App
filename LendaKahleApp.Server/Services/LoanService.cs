@@ -383,7 +383,7 @@ namespace LendaKahleApp.Server.Services
                 }
             }
 
-            loan.Status = LoanStatus.Approved;
+            loan.Status = LoanStatus.Active;
             loan.ApprovalDate = DateTime.UtcNow;
             loan.ApprovedBy = approvedBy;
             loan.StartDate = DateTime.UtcNow;
@@ -405,7 +405,7 @@ namespace LendaKahleApp.Server.Services
             await _notificationService.CreateAsync(
                 loan.BorrowerId,
                 "Loan Approved",
-                $"Your loan application #{loan.Id} has been approved for R{loan.PrincipalAmount:N2}.",
+                $"Your loan application #{loan.Id} has been approved for R{loan.PrincipalAmount:N2}. You can now start making repayments.",
                 Models.NotificationType.LoanApproval,
                 loan.Id
             );
