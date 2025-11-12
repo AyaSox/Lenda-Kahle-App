@@ -1,7 +1,11 @@
-﻿import React, { useState, useEffect } from 'react'
-import { TextField, Button, Paper, Typography, Box, Alert } from '@mui/material'
+import React, { useState, useEffect } from 'react'
+import { TextField, Button, Paper, Typography, Box, Alert, Snackbar, Alert as MuiAlert } from '@mui/material'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+
+const AlertComponent = React.forwardRef<HTMLDivElement, any>(function Alert(props, ref) {
+  return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />
+})
 
 const Register: React.FC = () => {
   const location = useLocation()
@@ -17,6 +21,11 @@ const Register: React.FC = () => {
     phoneNumber: '',
     address: '',
   })
+  
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>(
+    { open: false, message: '', severity: 'success' }
+  )
+  
   const { register } = useAuth()
   const navigate = useNavigate()
 
@@ -28,19 +37,36 @@ const Register: React.FC = () => {
     e.preventDefault()
     try {
       await register(formData)
-      if (state?.suggestedLoanAmount) {
-        navigate('/loans/apply', {
-          state: {
-            suggestedAmount: state.suggestedLoanAmount,
-            suggestedTerm: state.suggestedTerm,
-          },
-        })
-      } else {
-        navigate('/')
-      }
-    } catch (error) {
-      alert('Registration failed')
+      
+      // Show success message
+      setSnackbar({ 
+        open: true, 
+        message: 'Registration successful! Welcome to Lenda Kahle.', 
+        severity: 'success' 
+      })
+      
+      // Navigate after a short delay to show the success message
+      setTimeout(() => {
+        if (state?.suggestedLoanAmount) {
+          navigate('/loans/apply', {
+            state: {
+              suggestedAmount: state.suggestedLoanAmount,
+              suggestedTerm: state.suggestedTerm,
+            },
+          })
+        } else {
+          navigate('/')
+        }
+      }, 1500)
+    } catch (error: any) {
+      // ✅ FIX: Display the clean error message from AuthContext
+      const errorMessage = error?.message || 'Registration failed. Please try again.'
+      setSnackbar({ open: true, message: errorMessage, severity: 'error' })
     }
+  }
+
+  const handleCloseSnackbar = () => {
+    setSnackbar(prev => ({ ...prev, open: false }))
   }
 
   return (
@@ -76,6 +102,17 @@ const Register: React.FC = () => {
           </Box>
         </Box>
       </Paper>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <AlertComponent onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </AlertComponent>
+      </Snackbar>
     </Box>
   )
 }
