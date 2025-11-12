@@ -74,7 +74,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error('No token available')
       }
 
-      const response = await axios.get('/api/auth/profile')
+      const response = await axios.get('/api/auth/me')
       const normalized = normalizeUser(response.data)
       setUser(normalized)
     } catch (error: any) {
