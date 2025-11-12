@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import axios from '../api/axios'
+import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react'
+import axios from '../utils/axios'
 
 interface User {
   id: string
@@ -32,7 +32,6 @@ interface AuthProviderProps {
   children: ReactNode
 }
 
-// Helper: normalize user object from API (supports PascalCase and camelCase)
 const normalizeUser = (raw: any): User => {
   if (!raw) throw new Error('Invalid user payload')
   return {
@@ -74,6 +73,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error('No token available')
       }
 
+      // ✅ FIXED: Changed from /profile to /me
       const response = await axios.get('/api/auth/me')
       const normalized = normalizeUser(response.data)
       setUser(normalized)
@@ -103,7 +103,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(normalizeUser(apiUser))
     } catch (error: any) {
       console.error('Login error:', error.response?.data || error.message)
-      throw new Error(error.response?.data || 'Login failed')
+      
+      // ✅ FIX: Extract the actual error message properly
+      const errorMessage = 
+        error.response?.data?.message ||      // Backend error message
+        error.response?.data?.error ||        // Alternative error field
+        error.message ||                      // Axios error message
+        'Login failed. Please try again.';   // Fallback message
+      
+      throw new Error(errorMessage);  // Throw clean message, not object
     } finally {
       setIsLoading(false)
     }
@@ -124,7 +132,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(normalizeUser(apiUser))
     } catch (error: any) {
       console.error('Registration error:', error.response?.data || error.message)
-      throw new Error(error.response?.data || 'Registration failed')
+      
+      // ✅ FIX: Extract the actual error message properly
+      const errorMessage = 
+        error.response?.data?.message ||      // Backend error message
+        error.response?.data?.errors?.[0] ||  // First validation error
+        error.response?.data?.error ||        // Alternative error field
+        error.message ||                      // Axios error message
+        'Registration failed. Please try again.'; // Fallback message
+      
+      throw new Error(errorMessage);  // Throw clean message, not object
     } finally {
       setIsLoading(false)
     }
