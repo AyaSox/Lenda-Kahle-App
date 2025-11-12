@@ -1,98 +1,204 @@
 using LendaKahleApp.Server.DTOs;
-using LendaKahleApp.Server.Interfaces;
+using LendaKahleApp.Server.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 
 namespace LendaKahleApp.Server.Controllers
 {
-    [ApiController]
     [Route("api/[controller]")]
+    [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly IAuthService _authService;
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly SignInManager<ApplicationUser> _signInManager;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(IAuthService authService)
+        public AuthController(
+            UserManager<ApplicationUser> userManager,
+            SignInManager<ApplicationUser> signInManager,
+            IConfiguration configuration,
+            ILogger<AuthController> logger)
         {
-            _authService = authService;
+            _userManager = userManager;
+            _signInManager = signInManager;
+            _configuration = configuration;
+            _logger = logger;
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterDto registerDto)
+        public async Task<IActionResult> Register([FromBody] RegisterDto model)
         {
             try
             {
-                var result = await _authService.RegisterAsync(registerDto);
-                return Ok(result);
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
+                var user = new ApplicationUser
+                {
+                    UserName = model.Email,
+                    Email = model.Email,
+                    FirstName = model.FirstName,
+                    LastName = model.LastName,
+                    IDNumber = model.IDNumber,
+                    DateOfBirth = DateTime.SpecifyKind(model.DateOfBirth, DateTimeKind.Utc),
+                    Address = model.Address,
+                    PhoneNumber = model.PhoneNumber,
+                    CreatedDate = DateTime.UtcNow
+                };
+
+                var result = await _userManager.CreateAsync(user, model.Password);
+
+                if (!result.Succeeded)
+                {
+                    return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
+                }
+
+                // Add default "User" role
+                await _userManager.AddToRoleAsync(user, "User");
+
+                _logger.LogInformation("User {Email} registered successfully", model.Email);
+
+                return Ok(new { message = "Registration successful" });
             }
             catch (Exception ex)
             {
-                return BadRequest(ex.Message);
+                _logger.LogError(ex, "Error during registration for {Email}", model.Email);
+                return StatusCode(500, new { message = "An error occurred during registration", error = ex.Message });
             }
         }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
+        public async Task<IActionResult> Login([FromBody] LoginDto model)
         {
             try
             {
-                var result = await _authService.LoginAsync(loginDto);
-                return Ok(result);
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
+                var user = await _userManager.FindByEmailAsync(model.Email);
+                if (user == null)
+                {
+                    return Unauthorized(new { message = "Invalid email or password" });
+                }
+
+                var result = await _signInManager.CheckPasswordSignInAsync(user, model.Password, false);
+                if (!result.Succeeded)
+                {
+                    return Unauthorized(new { message = "Invalid email or password" });
+                }
+
+                var token = await GenerateJwtToken(user);
+                var roles = await _userManager.GetRolesAsync(user);
+
+                _logger.LogInformation("User {Email} logged in successfully", model.Email);
+
+                return Ok(new
+                {
+                    token,
+                    user = new
+                    {
+                        id = user.Id,
+                        email = user.Email,
+                        firstName = user.FirstName,
+                        lastName = user.LastName,
+                        roles
+                    }
+                });
             }
             catch (Exception ex)
             {
-                return BadRequest(ex.Message);
+                _logger.LogError(ex, "Error during login for {Email}", model.Email);
+                return StatusCode(500, new { message = "An error occurred during login", error = ex.Message });
             }
         }
 
         [Authorize]
-        [HttpGet("profile")]
-        public async Task<IActionResult> GetProfile()
+        [HttpGet("me")]
+        public async Task<IActionResult> GetCurrentUser()
         {
-            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (userId == null) return Unauthorized();
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized();
+                }
 
-            var profile = await _authService.GetUserProfileAsync(userId);
-            return Ok(profile);
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                {
+                    return NotFound();
+                }
+
+                var roles = await _userManager.GetRolesAsync(user);
+
+                return Ok(new
+                {
+                    id = user.Id,
+                    email = user.Email,
+                    firstName = user.FirstName,
+                    lastName = user.LastName,
+                    phoneNumber = user.PhoneNumber,
+                    idNumber = user.IDNumber,
+                    dateOfBirth = user.DateOfBirth,
+                    address = user.Address,
+                    roles
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting current user");
+                return StatusCode(500, new { message = "An error occurred", error = ex.Message });
+            }
         }
 
         [Authorize]
-        [HttpPut("profile")]
-        public async Task<IActionResult> UpdateProfile([FromBody] ApplicationUserDto userDto)
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
         {
-            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (userId == null) return Unauthorized();
-
-            var success = await _authService.UpdateUserProfileAsync(userId, userDto);
-            return success ? Ok() : BadRequest("Update failed");
+            await _signInManager.SignOutAsync();
+            return Ok(new { message = "Logged out successfully" });
         }
 
-        [HttpPost("forgot-password")]
-        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto forgotPasswordDto)
+        private async Task<string> GenerateJwtToken(ApplicationUser user)
         {
-            try
+            var roles = await _userManager.GetRolesAsync(user);
+            var claims = new List<Claim>
             {
-                var success = await _authService.RequestPasswordResetAsync(forgotPasswordDto.Email);
-                // Always return success for security (don't reveal if email exists)
-                return Ok(new { message = "If the email exists, a password reset link has been sent." });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
-        }
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Name, user.UserName ?? string.Empty),
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
 
-        [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto resetPasswordDto)
-        {
-            try
+            foreach (var role in roles)
             {
-                var success = await _authService.ResetPasswordAsync(resetPasswordDto.Email, resetPasswordDto.Token, resetPasswordDto.NewPassword);
-                return success ? Ok(new { message = "Password reset successfully" }) : BadRequest("Password reset failed");
+                claims.Add(new Claim(ClaimTypes.Role, role));
             }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured")));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var expires = DateTime.UtcNow.AddDays(7);
+
+            var token = new JwtSecurityToken(
+                issuer: _configuration["Jwt:Issuer"],
+                audience: _configuration["Jwt:Audience"],
+                claims: claims,
+                expires: expires,
+                signingCredentials: creds
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
     }
 }
