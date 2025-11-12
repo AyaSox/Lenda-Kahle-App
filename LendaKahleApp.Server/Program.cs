@@ -1,6 +1,8 @@
 using LendaKahleApp.Server.Data;
 using LendaKahleApp.Server.Models;
 using LendaKahleApp.Server.Services;
+using LendaKahleApp.Server.Interfaces;
+using LendaKahleApp.Server.Hubs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -78,16 +80,20 @@ builder.Services.AddCors(options =>
     });
 });
 
+// SignalR for real-time notifications
+builder.Services.AddSignalR();
+
 // Hangfire
 builder.Services.AddHangfire(config =>
     config.UsePostgreSqlStorage(connectionString));
 builder.Services.AddHangfireServer();
 
-// Custom Services - Temporarily commented out until interfaces are created
-// builder.Services.AddScoped<ILoanService, LoanService>();
-// builder.Services.AddScoped<IAffordabilityService, AffordabilityService>();
-// builder.Services.AddScoped<ICreditCheckService, CreditCheckService>();
-// builder.Services.AddScoped<INotificationService, NotificationService>();
+// Custom Services (INotificationService is in Services namespace, others in Interfaces)
+builder.Services.AddScoped<ILoanService, LoanService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IPdfService, PdfService>();
 
 var app = builder.Build();
 
@@ -118,8 +124,13 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Hangfire Dashboard - Simplified (no custom authorization for now)
+// Hangfire Dashboard
 app.UseHangfireDashboard("/hangfire");
 
+// Map Controllers
 app.MapControllers();
+
+// Map SignalR Hub for real-time notifications
+app.MapHub<NotificationsHub>("/hubs/notifications");
+
 app.Run();
