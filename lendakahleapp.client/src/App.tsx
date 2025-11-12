@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import { CssBaseline, ThemeProvider, createTheme, Fab, Badge, Tooltip, Container } from '@mui/material'
 import { SmartToy as BotIcon } from '@mui/icons-material'
 import { AuthProvider } from './context/AuthContext'
@@ -41,7 +41,7 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <Router>
+        <>
           <Navbar />
           <Container 
             maxWidth="xl" 
@@ -100,7 +100,7 @@ function App() {
 
           {/* AI Chatbot Component */}
           <LendaKahleChatbot open={chatbotOpen} onClose={() => setChatbotOpen(false)} />
-        </Router>
+        </>
       </AuthProvider>
     </ThemeProvider>
   )
