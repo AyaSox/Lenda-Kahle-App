@@ -1,22 +1,28 @@
 import React, { useState } from 'react'
 import {
   Container,
+  Box,
   Paper,
+  Typography,
   TextField,
   Button,
-  Typography,
-  Box,
-  Alert,
   Stepper,
   Step,
-  StepLabel
+  StepLabel,
+  Alert,
+  Link as MuiLink
 } from '@mui/material'
-import { Link } from 'react-router-dom'
-import axios from '../api/axios'
+import { Link, useNavigate } from 'react-router-dom'
+import axios from 'axios'
+
+// Configure axios
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'https://lenda-kahle-app.onrender.com'
 
 const ForgotPassword: React.FC = () => {
+  const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [email, setEmail] = useState('')
+  const [firstName, setFirstName] = useState('')
   const [token, setToken] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -24,19 +30,25 @@ const ForgotPassword: React.FC = () => {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  const steps = ['Request Reset', 'Enter Token', 'New Password']
+  const steps = ['Verify Identity', 'Reset Password', 'Complete']
 
-  const handleRequestReset = async () => {
+  const handleVerifyAccount = async () => {
     setLoading(true)
     setError('')
     setMessage('')
 
     try {
-      await axios.post('/api/auth/forgot-password', { email })
-      setMessage('If the email exists, a password reset token has been generated. Check console for the token (in production, this would be sent via email).')
+      const response = await axios.post('/api/auth/verify-account', {
+        email,
+        firstName
+      })
+
+      setMessage(response.data.message || 'Account verified successfully!')
+      setToken(response.data.token)
       setStep(1)
     } catch (err: any) {
-      setError(err.response?.data || 'Failed to request password reset')
+      const errorMessage = err.response?.data?.message || 'Account verification failed. Please check your information.'
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -58,15 +70,22 @@ const ForgotPassword: React.FC = () => {
     setMessage('')
 
     try {
-      await axios.post('/api/auth/reset-password', {
+      const response = await axios.post('/api/auth/reset-password', {
         email,
         token,
         newPassword
       })
-      setMessage('Password reset successfully! You can now login with your new password.')
+
+      setMessage(response.data.message || 'Password reset successfully!')
       setStep(2)
+
+      // Redirect to login after 3 seconds
+      setTimeout(() => {
+        navigate('/login')
+      }, 3000)
     } catch (err: any) {
-      setError(err.response?.data || 'Failed to reset password')
+      const errorMessage = err.response?.data?.message || 'Password reset failed. Please try again.'
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -82,7 +101,7 @@ const ForgotPassword: React.FC = () => {
           alignItems: 'center',
         }}
       >
-        <Paper elevation={3} sx={{ padding: 4, width: '100%' }}>
+        <Paper elevation={6} sx={{ padding: 4, width: '100%', borderRadius: 4 }}>
           <Typography component="h1" variant="h4" align="center" gutterBottom>
             Reset Password
           </Typography>
@@ -108,8 +127,12 @@ const ForgotPassword: React.FC = () => {
           )}
 
           <Box component="form" noValidate sx={{ mt: 1 }}>
+            {/* Step 0: Verify Account with Email + First Name */}
             {step === 0 && (
               <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  To reset your password, please enter your email address and first name to verify your identity.
+                </Typography>
                 <TextField
                   margin="normal"
                   required
@@ -121,94 +144,113 @@ const ForgotPassword: React.FC = () => {
                   autoFocus
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  InputProps={{ sx: { borderRadius: 2 } }}
+                />
+                <TextField
+                  margin="normal"
+                  required
+                  fullWidth
+                  id="firstName"
+                  label="First Name"
+                  name="firstName"
+                  autoComplete="given-name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  InputProps={{ sx: { borderRadius: 2 } }}
                 />
                 <Button
                   fullWidth
                   variant="contained"
-                  sx={{ mt: 3, mb: 2 }}
-                  onClick={handleRequestReset}
-                  disabled={loading || !email}
+                  sx={{ mt: 3, mb: 2, borderRadius: 2, py: 1.2 }}
+                  onClick={handleVerifyAccount}
+                  disabled={loading || !email || !firstName}
                 >
-                  {loading ? 'Sending...' : 'Send Reset Token'}
+                  {loading ? 'Verifying...' : 'Verify Identity'}
                 </Button>
               </>
             )}
 
+            {/* Step 1: Set New Password */}
             {step === 1 && (
               <>
-                <Alert severity="info" sx={{ mb: 2 }}>
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  <Typography variant="body2" fontWeight="bold">
+                    ✅ Identity Verified!
+                  </Typography>
                   <Typography variant="body2">
-                    <strong>Demo Mode:</strong> Check the browser console or server logs for the password reset token.
-                    In production, this would be sent to your email.
+                    You can now set a new password for your account.
                   </Typography>
                 </Alert>
+
                 <TextField
                   margin="normal"
                   required
                   fullWidth
-                  id="token"
-                  label="Reset Token"
-                  name="token"
-                  autoFocus
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  placeholder="Enter the token from console/email"
-                />
-                <TextField
-                  margin="normal"
-                  required
-                  fullWidth
-                  name="newPassword"
-                  label="New Password"
-                  type="password"
                   id="newPassword"
+                  label="New Password"
+                  name="newPassword"
+                  type="password"
                   autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
+                  helperText="Password must be at least 6 characters"
+                  InputProps={{ sx: { borderRadius: 2 } }}
                 />
                 <TextField
                   margin="normal"
                   required
                   fullWidth
-                  name="confirmPassword"
-                  label="Confirm New Password"
-                  type="password"
                   id="confirmPassword"
+                  label="Confirm New Password"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  InputProps={{ sx: { borderRadius: 2 } }}
                 />
                 <Button
                   fullWidth
                   variant="contained"
-                  sx={{ mt: 3, mb: 2 }}
+                  sx={{ mt: 3, mb: 2, borderRadius: 2, py: 1.2 }}
                   onClick={handleResetPassword}
-                  disabled={loading || !token || !newPassword || !confirmPassword}
+                  disabled={loading || !newPassword || !confirmPassword}
                 >
-                  {loading ? 'Resetting...' : 'Reset Password'}
+                  {loading ? 'Resetting Password...' : 'Reset Password'}
                 </Button>
               </>
             )}
 
+            {/* Step 2: Success */}
             {step === 2 && (
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h6" color="success.main" gutterBottom>
-                  Password Reset Complete!
-                </Typography>
+              <>
+                <Alert severity="success" sx={{ mb: 3 }}>
+                  <Typography variant="h6" gutterBottom>
+                    🎉 Password Reset Successfully!
+                  </Typography>
+                  <Typography variant="body2">
+                    Your password has been changed. You can now login with your new password.
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 1 }}>
+                    Redirecting to login page in 3 seconds...
+                  </Typography>
+                </Alert>
                 <Button
-                  component={Link}
-                  to="/login"
+                  fullWidth
                   variant="contained"
-                  sx={{ mt: 2 }}
+                  color="primary"
+                  sx={{ borderRadius: 2, py: 1.2 }}
+                  onClick={() => navigate('/login')}
                 >
-                  Go to Login
+                  Go to Login Now
                 </Button>
-              </Box>
+              </>
             )}
 
-            <Box sx={{ mt: 2, textAlign: 'center' }}>
-              <Button component={Link} to="/login" variant="text">
-                Back to Login
-              </Button>
+            <Box sx={{ mt: 3, textAlign: 'center' }}>
+              <MuiLink component={Link} to="/login" variant="body2">
+                Remember your password? Login here
+              </MuiLink>
             </Box>
           </Box>
         </Paper>
