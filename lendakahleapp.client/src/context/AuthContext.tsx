@@ -1,5 +1,15 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react'
-import axios from '../utils/axios'
+import axios from 'axios'  
+
+// Configure axios defaults
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'https://lenda-kahle-app.onrender.com'
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
 
 interface User {
   id: string
@@ -56,7 +66,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } catch (error) {
         console.error('Auth initialization error:', error)
-        // Clear any invalid token
         localStorage.removeItem('token')
       } finally {
         setIsLoading(false)
@@ -73,14 +82,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error('No token available')
       }
 
-      // ✅ FIXED: Changed from /profile to /me
       const response = await axios.get('/api/auth/me')
       const normalized = normalizeUser(response.data)
       setUser(normalized)
     } catch (error: any) {
       console.error('Failed to fetch user profile:', error.response?.data || error.message)
       
-      // Only logout if it's an authentication error
       if (error.response?.status === 401 || error.response?.status === 403) {
         logout()
       }
@@ -104,14 +111,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       console.error('Login error:', error.response?.data || error.message)
       
-      // ✅ FIX: Extract the actual error message properly
       const errorMessage = 
-        error.response?.data?.message ||      // Backend error message
-        error.response?.data?.error ||        // Alternative error field
-        error.message ||                      // Axios error message
-        'Login failed. Please try again.';   // Fallback message
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Login failed. Please try again.'
       
-      throw new Error(errorMessage);  // Throw clean message, not object
+      throw new Error(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -133,15 +139,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       console.error('Registration error:', error.response?.data || error.message)
       
-      // ✅ FIX: Extract the actual error message properly
       const errorMessage = 
-        error.response?.data?.message ||      // Backend error message
-        error.response?.data?.errors?.[0] ||  // First validation error
-        error.response?.data?.error ||        // Alternative error field
-        error.message ||                      // Axios error message
-        'Registration failed. Please try again.'; // Fallback message
+        error.response?.data?.message ||
+        error.response?.data?.errors?.[0] ||
+        error.response?.data?.error ||
+        error.message ||
+        'Registration failed. Please try again.'
       
-      throw new Error(errorMessage);  // Throw clean message, not object
+      throw new Error(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -150,7 +155,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token')
     setUser(null)
-    // Optional: Clear any other stored auth data
     sessionStorage.clear()
   }
 
