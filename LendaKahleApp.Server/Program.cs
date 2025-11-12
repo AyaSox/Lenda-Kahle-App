@@ -1,34 +1,46 @@
-using Hangfire;
 using LendaKahleApp.Server.Data;
-using LendaKahleApp.Server.Interfaces;
 using LendaKahleApp.Server.Models;
 using LendaKahleApp.Server.Services;
-using Microsoft.AspNetCore.SignalR;
-using LendaKahleApp.Server.Hubs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using LendaKahleApp.Server.Configuration;
+using Hangfire;
 using Hangfire.PostgreSql;
+
+// Fix PostgreSQL DateTime timezone handling
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Bind LendingRules configuration
-builder.Services.Configure<LendingRules>(builder.Configuration.GetSection("LendingRules"));
+// Add services to the container
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
-// Database (PostgreSQL)
+// Database
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
 // Identity
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
-    .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddDefaultTokenProviders();
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+{
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireNonAlphanumeric = true;
+    options.Password.RequiredLength = 8;
+    options.User.RequireUniqueEmail = true;
+})
+.AddEntityFrameworkStores<ApplicationDbContext>()
+.AddDefaultTokenProviders();
 
-// JWT
+// JWT Authentication
+var jwtSettings = builder.Configuration.GetSection("Jwt");
+var key = Encoding.ASCII.GetBytes(jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key not configured"));
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -36,77 +48,50 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
+    options.RequireHttpsMetadata = true;
+    options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ValidateIssuer = true,
+        ValidIssuer = jwtSettings["Issuer"],
+        ValidateAudience = true,
+        ValidAudience = jwtSettings["Audience"],
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.Zero
     };
 });
 
-// Services
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<ILoanService, LoanService>();
-builder.Services.AddScoped<IReportService, ReportService>();
-builder.Services.AddScoped<IPdfService, PdfService>();
-builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddScoped<INotificationService, NotificationService>();
-
-// SignalR
-builder.Services.AddSignalR();
-
-// Hangfire (PostgreSQL storage)
-builder.Services.AddHangfire(config =>
-    config.UsePostgreSqlStorage(builder.Configuration.GetConnectionString("DefaultConnection")));
-builder.Services.AddHangfireServer();
-
-// CORS - Environment-aware configuration
-var corsOrigins = builder.Configuration.GetSection("CORS:AllowedOrigins").Get<string[]>() 
-    ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+// CORS
+var allowedOrigins = builder.Configuration.GetSection("CORS:AllowedOrigins").Get<string[]>() 
+    ?? new[] { "http://localhost:5173", "https://localhost:5173" };
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("LendaKahleCors", policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(corsOrigins)
-              .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
-              .WithHeaders("Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With")
-              .AllowCredentials()
-              .WithExposedHeaders("Content-Disposition");
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
-
-    // Development-only policy
-    if (builder.Environment.IsDevelopment())
-    {
-        options.AddPolicy("Development", policy =>
-        {
-            policy.AllowAnyOrigin()
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
-        });
-    }
 });
 
-// Configure file upload size limit (30MB)
-builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
-{
-    options.MultipartBodyLengthLimit = 31457280; // 30MB
-    options.ValueLengthLimit = 31457280; // 30MB
-    options.MultipartHeadersLengthLimit = 16384;
-    options.MemoryBufferThreshold = 4 * 1024 * 1024; // 4MB
-});
+// Hangfire
+builder.Services.AddHangfire(config =>
+    config.UsePostgreSqlStorage(connectionString));
+builder.Services.AddHangfireServer();
 
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Custom Services
+builder.Services.AddScoped<ILoanService, LoanService>();
+builder.Services.AddScoped<IAffordabilityService, AffordabilityService>();
+builder.Services.AddScoped<ICreditCheckService, CreditCheckService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 var app = builder.Build();
 
-// Seed database (roles and default users)
+// Seed database
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -121,43 +106,24 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Configure the HTTP request pipeline.
+// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "LendaKahleApp API V1");
-        c.RoutePrefix = "swagger";
-    });
+    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
-
-// Use environment-appropriate CORS policy
-app.UseCors(app.Environment.IsDevelopment() ? "Development" : "LendaKahleCors");
-
+app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
-
-// SignalR hubs
-app.MapHub<NotificationsHub>("/hubs/notifications");
-
 // Hangfire Dashboard
-if (app.Environment.IsDevelopment())
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
-    app.UseHangfireDashboard("/hangfire", new DashboardOptions
-    {
-        Authorization = Array.Empty<Hangfire.Dashboard.IDashboardAuthorizationFilter>()
-    });
-}
-else
-{
-    app.UseHangfireDashboard("/hangfire");
-}
+    Authorization = new[] { new HangfireAuthorizationFilter() }
+});
 
-app.MapFallbackToFile("/index.html");
-
+app.MapControllers();
+app.Run();
 app.Run();
