@@ -21,7 +21,7 @@ const Login: React.FC = () => {
     try {
       const flag = localStorage.getItem('sessionEndedMessage')
       if (flag === 'true') {
-        setSnackbar({ open: true, message: 'Your session has ended — Thank you for using LendaKahleApp', severity: 'info' })
+        setSnackbar({ open: true, message: 'Your session has ended. Thank you for using LendaKahleApp', severity: 'info' })
         // Do NOT remove the flag here so message persists across refreshes until user dismisses it
       }
     } catch (e) {
@@ -37,7 +37,9 @@ const Login: React.FC = () => {
       try { localStorage.removeItem('sessionEndedMessage') } catch {}
       navigate('/')
     } catch (error: any) {
-      setSnackbar({ open: true, message: error?.message || 'Login failed', severity: 'error' })
+      // âœ… FIX: Display the clean error message from AuthContext
+      const errorMessage = error?.message || 'Login failed. Please try again.'
+      setSnackbar({ open: true, message: errorMessage, severity: 'error' })
     }
   }
 
