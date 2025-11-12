@@ -83,11 +83,11 @@ builder.Services.AddHangfire(config =>
     config.UsePostgreSqlStorage(connectionString));
 builder.Services.AddHangfireServer();
 
-// Custom Services
-builder.Services.AddScoped<ILoanService, LoanService>();
-builder.Services.AddScoped<IAffordabilityService, AffordabilityService>();
-builder.Services.AddScoped<ICreditCheckService, CreditCheckService>();
-builder.Services.AddScoped<INotificationService, NotificationService>();
+// Custom Services - Temporarily commented out until interfaces are created
+// builder.Services.AddScoped<ILoanService, LoanService>();
+// builder.Services.AddScoped<IAffordabilityService, AffordabilityService>();
+// builder.Services.AddScoped<ICreditCheckService, CreditCheckService>();
+// builder.Services.AddScoped<INotificationService, NotificationService>();
 
 var app = builder.Build();
 
@@ -118,12 +118,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Hangfire Dashboard
-app.UseHangfireDashboard("/hangfire", new DashboardOptions
-{
-    Authorization = new[] { new HangfireAuthorizationFilter() }
-});
+// Hangfire Dashboard - Simplified (no custom authorization for now)
+app.UseHangfireDashboard("/hangfire");
 
 app.MapControllers();
-app.Run();
 app.Run();
