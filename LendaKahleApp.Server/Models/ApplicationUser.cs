@@ -11,6 +11,7 @@ namespace LendaKahleApp.Server.Models
         public string Address { get; set; } = string.Empty;
         public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
         public bool IsDeleted { get; set; }
+        public DateTime? DeletedAt { get; set; }
 
         // Navigation properties
         public ICollection<Loan> Loans { get; set; } = new List<Loan>();
