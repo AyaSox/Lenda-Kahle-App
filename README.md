@@ -11,14 +11,14 @@ Professional, NCA-compliant lending platform for South Africa built with .NET 8 
 
 ## Overview
 
-Lenda Kahle is a complete, production-ready micro?lending platform featuring:
+Lenda Kahle is a complete, production‑ready micro‑lending platform featuring:
 
 - NCA compliance
 - Loan calculator, applications, approvals
 - Document verification and uploads
 - Admin dashboard and audit logging
 - Notifications (real-time + email)
-- AI assistant (optional, client-side only)
+- In‑app assistant/chatbot (optional, client-side only)
 
 ---
 
@@ -95,7 +95,7 @@ Frontend
 - JWT token authentication
 - HTTPS everywhere
 - CORS configuration
-- Input validation and SQL?injection safe ORM
+- Input validation and SQL‑injection‑safe ORM
 - Audit logging
 
 ---
@@ -137,5 +137,5 @@ MIT. See `LICENSE` if included in your repository.
 
 - Email and SMS notifications
 - Credit bureau integration
-- Multi?language support
+- Multi‑language support
 - Payment gateway integration
