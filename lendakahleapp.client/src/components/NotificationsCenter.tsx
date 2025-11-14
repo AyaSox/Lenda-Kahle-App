@@ -54,7 +54,7 @@ interface NotificationsCenterProps {
   onClose: () => void
 }
 
-// Decode HTML entities (e.g. "&#9989;" -> ?). If unsupported, leave plain text.
+// Decode HTML entities (e.g. "&#9989;"). If unsupported, leave plain text.
 const decodeHtml = (html: string) => {
   if (!html) return html
   const txt = document.createElement('textarea')
@@ -62,44 +62,44 @@ const decodeHtml = (html: string) => {
   return txt.value
 }
 
-// Normalize text: decode entities; remove stray double question marks used as broken emoji
+// Normalize text: decode entities; remove stray multiple question marks used as broken emoji
 const normalizeText = (input: string) => {
-  if (!input) return input
+  if (!input) return ''
   let text = decodeHtml(input)
-  // Replace occurrences of double question marks with nothing
+  // remove runs of 2+ question marks (often from unsupported emoji)
   text = text.replace(/\?{2,}/g, '')
-  // Trim leftover whitespace
+  // collapse whitespace
+  text = text.replace(/\s{2,}/g, ' ')
   return text.trim()
 }
 
-// South Africa local time format
-const formatSADateTime = (value: string) => {
-  try {
-    if (!value) return ''
-    const hasTz = /([zZ]|[+\-]\d{2}:?\d{2})$/.test(value)
-    const iso = hasTz ? value : `${value.replace(/\s$/, '')}Z`
-    const d = new Date(iso)
-    return d.toLocaleString('en-ZA', {
-      timeZone: 'Africa/Johannesburg',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch {
-    return value
-  }
+// Simple SA date-time formatter (expects an ISO string; backend sends UTC)
+const formatSADateTime = (iso: string) => {
+  if (!iso) return ''
+  const date = new Date(iso.endsWith('Z') ? iso : iso + 'Z')
+  return date.toLocaleString('en-ZA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
-const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ open, onClose }) => {
+export const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ open, onClose }) => {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Fetch notifications whenever the drawer is opened
   useEffect(() => {
-    fetchNotifications()
-  }, [])
+    if (open) {
+      fetchNotifications()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const fetchNotifications = async () => {
+    setLoading(true)
     try {
       const response = await axios.get('/api/notifications')
       const list = Array.isArray(response.data) ? response.data : (response.data?.items ?? [])
@@ -121,9 +121,12 @@ const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ open, onClose
           loanId
         } as Notification
       })
-      setNotifications(apiNotifications.sort((a: Notification, b: Notification) =>
-        new Date((b.date?.endsWith('Z') ? b.date : (b.date ? b.date + 'Z' : ''))).getTime() - new Date((a.date?.endsWith('Z') ? a.date : (a.date ? a.date + 'Z' : ''))).getTime()
-      ))
+      setNotifications(
+        apiNotifications.sort((a: Notification, b: Notification) =>
+          new Date((b.date?.endsWith('Z') ? b.date : (b.date ? b.date + 'Z' : ''))).getTime() -
+          new Date((a.date?.endsWith('Z') ? a.date : (a.date ? a.date + 'Z' : ''))).getTime()
+        )
+      )
     } catch (error) {
       console.error('Failed to fetch notifications', error)
       setNotifications([])
@@ -148,63 +151,101 @@ const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ open, onClose
     }
   }
 
-  const markAsRead = (notificationId: string) => {
-    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n))
-    axios.post(`/api/notifications/mark-read/${notificationId}`).catch(() => {})
-  }
-
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-    axios.post('/api/notifications/mark-all-read').catch(() => {})
-  }
-
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
-      case 'loan_preapproved': return <CheckCircleIcon color="info" />
-      case 'loan_approval': return <CheckCircleIcon color="success" />
-      case 'loan_rejected': return <WarningIcon color="error" />
-      case 'payment_due': return <ScheduleIcon color="warning" />
-      case 'payment_received': return <PaymentIcon color="success" />
-      case 'loan_overdue': return <WarningIcon color="error" />
-      case 'application_submitted': return <EmailIcon color="info" />
-      case 'document_verified': return <CheckCircleIcon color="success" />
-      case 'document_rejected': return <WarningIcon color="error" />
-      case 'loan_completed': return <CheckCircleIcon color="success" />
-      default: return <NotificationsIcon />
+      case 'payment_due':
+        return <ScheduleIcon color="warning" />
+      case 'payment_received':
+        return <PaymentIcon color="success" />
+      case 'loan_approval':
+      case 'loan_preapproved':
+      case 'loan_completed':
+        return <CheckCircleIcon color="success" />
+      case 'loan_overdue':
+      case 'loan_rejected':
+        return <WarningIcon color="error" />
+      case 'document_verified':
+      case 'document_rejected':
+      case 'application_submitted':
+        return <EmailIcon color="info" />
+      default:
+        return <NotificationsIcon color="action" />
     }
   }
 
   const getNotificationColor = (type: Notification['type']) => {
     switch (type) {
-      case 'loan_preapproved': return 'info'
-      case 'loan_approval': return 'success'
-      case 'loan_rejected': return 'error'
       case 'payment_due': return 'warning'
       case 'payment_received': return 'success'
-      case 'loan_overdue': return 'error'
-      case 'application_submitted': return 'info'
-      case 'document_verified': return 'success'
-      case 'document_rejected': return 'error'
+      case 'loan_approval':
+      case 'loan_preapproved':
       case 'loan_completed': return 'success'
+      case 'loan_overdue':
+      case 'loan_rejected': return 'error'
+      case 'document_verified':
+      case 'application_submitted': return 'info'
+      case 'document_rejected': return 'warning'
+      case 'general': return 'default'
       default: return 'default'
+    }
+  }
+
+  const markAsRead = async (id: string) => {
+    try {
+      await axios.post(`/api/notifications/mark-read/${id}`)
+      setNotifications(prev =>
+        prev.map(n => (n.id === id ? { ...n, read: true } : n))
+      )
+    } catch (error) {
+      console.error('Failed to mark notification as read', error)
+    }
+  }
+
+  const markAllAsRead = async () => {
+    try {
+      await axios.post('/api/notifications/mark-all-read')
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    } catch (error) {
+      console.error('Failed to mark all notifications as read', error)
     }
   }
 
   const unreadCount = notifications.filter(n => !n.read).length
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: '100%', sm: 400 } } }}>
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      PaperProps={{ sx: { width: { xs: '100%', sm: 400 } } }}
+    >
       <Box sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: 2
+          }}
+        >
           <Typography variant="h6">
             Notifications
-            {unreadCount > 0 && <Badge badgeContent={unreadCount} color="error" sx={{ ml: 1 }} />}
+            {unreadCount > 0 && (
+              <Badge badgeContent={unreadCount} color="error" sx={{ ml: 1 }} />
+            )}
           </Typography>
-          <IconButton onClick={onClose}><CloseIcon /></IconButton>
+          <IconButton onClick={onClose}>
+            <CloseIcon />
+          </IconButton>
         </Box>
 
         {unreadCount > 0 && (
-          <Button startIcon={<MarkEmailReadIcon />} onClick={markAllAsRead} size="small" sx={{ mb: 2 }}>
+          <Button
+            startIcon={<MarkEmailReadIcon />}
+            onClick={markAllAsRead}
+            size="small"
+            sx={{ mb: 2 }}
+          >
             Mark All as Read
           </Button>
         )}
@@ -218,23 +259,39 @@ const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ open, onClose
             {notifications.map(n => (
               <ListItem
                 key={n.id}
-                sx={{ backgroundColor: n.read ? 'transparent' : 'action.hover', borderRadius: 1, mb: 1, cursor: 'pointer' }}
+                sx={{
+                  backgroundColor: n.read ? 'transparent' : 'action.hover',
+                  borderRadius: 1,
+                  mb: 1,
+                  cursor: 'pointer'
+                }}
                 onClick={() => markAsRead(n.id)}
               >
                 <ListItemIcon>{getNotificationIcon(n.type)}</ListItemIcon>
                 <ListItemText
                   primary={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" fontWeight={n.read ? 'normal' : 'bold'}>
+                      <Typography
+                        variant="body2"
+                        fontWeight={n.read ? 'normal' : 'bold'}
+                      >
                         {n.title}
                       </Typography>
-                      <Chip label={n.type.replace(/_/g, ' ').toUpperCase()} size="small" color={getNotificationColor(n.type) as any} />
+                      <Chip
+                        label={n.type.replace(/_/g, ' ').toUpperCase()}
+                        size="small"
+                        color={getNotificationColor(n.type) as any}
+                      />
                     </Box>
                   }
                   secondary={
                     <>
-                      <Typography variant="body2" sx={{ mt: 0.5 }}>{n.message}</Typography>
-                      <Typography variant="caption" color="textSecondary">{formatSADateTime(n.date)}</Typography>
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        {n.message}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        {formatSADateTime(n.date)}
+                      </Typography>
                     </>
                   }
                 />
@@ -245,9 +302,15 @@ const NotificationsCenter: React.FC<NotificationsCenterProps> = ({ open, onClose
 
         {notifications.length === 0 && !loading && (
           <Box sx={{ textAlign: 'center', py: 4 }}>
-            <NotificationsIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-            <Typography variant="h6" color="textSecondary">No notifications yet</Typography>
-            <Typography variant="body2" color="textSecondary">You will see loan updates and reminders here</Typography>
+            <NotificationsIcon
+              sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }}
+            />
+            <Typography variant="h6" color="textSecondary">
+              No notifications yet
+            </Typography>
+            <Typography variant="body2" color="textSecondary">
+              You will see loan updates and reminders here
+            </Typography>
           </Box>
         )}
 
@@ -270,6 +333,7 @@ export const NotificationBell: React.FC = () => {
     fetchUnreadCount()
     const interval = setInterval(fetchUnreadCount, 30000)
     return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchUnreadCount = async () => {
@@ -285,11 +349,14 @@ export const NotificationBell: React.FC = () => {
   return (
     <>
       <IconButton color="inherit" onClick={() => setNotificationsOpen(true)}>
-        <Badge badgeContent={unreadCount} color="error"><NotificationsIcon /></Badge>
+        <Badge badgeContent={unreadCount} color="error">
+          <NotificationsIcon />
+        </Badge>
       </IconButton>
-      <NotificationsCenter open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
+      <NotificationsCenter
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+      />
     </>
   )
 }
-
-export default NotificationsCenter
