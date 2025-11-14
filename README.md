@@ -126,13 +126,6 @@ MIT. See `LICENSE` if included in your repository.
 
 ---
 
-## Support
-
-- Deployment: `DEPLOYMENT_GUIDE_SPLIT_STACK.md`
-- PostgreSQL: `POSTGRESQL_MIGRATION_GUIDE.md`, `verify-postgres-schema.sql`
-
----
-
 ## Roadmap (selected)
 
 - Email and SMS notifications
