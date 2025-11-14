@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Route, Routes } from 'react-router-dom'
-import { CssBaseline, ThemeProvider, createTheme, Fab, Badge, Tooltip, Container } from '@mui/material'
+import { CssBaseline, ThemeProvider, createTheme, Fab, Tooltip, Container } from '@mui/material'
 import { SmartToy as BotIcon } from '@mui/icons-material'
 import { AuthProvider } from './context/AuthContext'
 import Navbar from './components/Navbar'
@@ -73,8 +73,8 @@ function App() {
             </Routes>
           </Container>
 
-          {/* AI Chatbot Floating Button */}
-          <Tooltip title="Ask Lenda Kahle AI" placement="left">
+          {/* Chatbot Floating Button */}
+          <Tooltip title="Ask Lenda Kahle Assistant" placement="left">
             <Fab
               color="primary"
               onClick={() => setChatbotOpen(!chatbotOpen)}
@@ -92,13 +92,11 @@ function App() {
                 boxShadow: '0 4px 20px rgba(1,38,63,0.4)'
               }}
             >
-              <Badge badgeContent="AI" color="secondary" sx={{ '& .MuiBadge-badge': { bgcolor: '#d4af37', color: '#01263f', fontWeight: 'bold' } }}>
-                <BotIcon sx={{ fontSize: 28 }} />
-              </Badge>
+              <BotIcon sx={{ fontSize: 28 }} />
             </Fab>
           </Tooltip>
 
-          {/* AI Chatbot Component */}
+          {/* Chatbot Component */}
           <LendaKahleChatbot open={chatbotOpen} onClose={() => setChatbotOpen(false)} />
         </>
       </AuthProvider>
