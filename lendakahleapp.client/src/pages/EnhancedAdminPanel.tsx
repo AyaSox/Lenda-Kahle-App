@@ -125,304 +125,195 @@ const EnhancedAdminPanel: React.FC = () => {
   const [persistedSettingsMeta, setPersistedSettingsMeta] = useState<{ updatedAt?: string; updatedByEmail?: string }>({})
   const [maxLoanAmountInput, setMaxLoanAmountInput] = useState<string>('')
   const [maxLoanTermInput, setMaxLoanTermInput] = useState<string>('')
-
   const [smallLoanBaseRateInput, setSmallLoanBaseRateInput] = useState<string>('')
   const [mediumLoanBaseRateInput, setMediumLoanBaseRateInput] = useState<string>('')
   const [largeLoanBaseRateInput, setLargeLoanBaseRateInput] = useState<string>('')
   const [minInterestRateInput, setMinInterestRateInput] = useState<string>('')
   const [maxInterestRateInput, setMaxInterestRateInput] = useState<string>('')
 
-  const [analytics, setAnalytics] = useState<{
-    totalLoans: number
-    activeLoans: number
-    pendingLoans: number
-    totalRevenue: number
-  } | null>(null)
-
   useEffect(() => {
-    fetchUsers()
-    fetchSettings()
-    fetchPersistedSystemSettings()
-    fetchAnalytics()
+    const fetchData = async () => {
+      try {
+        const [usersRes, settingsRes, lendingRulesRes, persistedSettingsRes] = await Promise.all([
+          axios.get('/api/admin/users'),
+          axios.get('/api/admin/system-settings'),
+          axios.get('/api/admin/lending-rules'),
+          axios.get('/api/admin/system-settings/meta')
+        ])
+
+        setUsers(usersRes.data || [])
+        setSettings(settingsRes.data || settings)
+
+        const rules = lendingRulesRes.data
+        setLendingRules(rules)
+
+        const meta: PersistedSystemSettings | null = persistedSettingsRes.data || null
+        if (meta) {
+          setPersistedSettingsMeta({
+            updatedAt: meta.updatedAt,
+            updatedByEmail: meta.updatedByEmail
+          })
+          setMaxLoanAmountInput(meta.maxLoanAmount?.toString() ?? '')
+          setMaxLoanTermInput(meta.maxLoanTermMonths?.toString() ?? '')
+          setSmallLoanBaseRateInput(meta.smallLoanBaseRate?.toString() ?? '')
+          setMediumLoanBaseRateInput(meta.mediumLoanBaseRate?.toString() ?? '')
+          setLargeLoanBaseRateInput(meta.largeLoanBaseRate?.toString() ?? '')
+          setMinInterestRateInput(meta.minimumInterestRate?.toString() ?? '')
+          setMaxInterestRateInput(meta.maximumInterestRate?.toString() ?? '')
+        }
+
+        setLoading(false)
+      } catch (error) {
+        console.error('Failed to load admin data', error)
+        setSnackbar({
+          open: true,
+          message: 'Failed to load admin data',
+          severity: 'error'
+        })
+        setLoading(false)
+      }
+    }
+
+    fetchData()
   }, [])
 
-  const fetchUsers = async () => {
-    try {
-      const response = await axios.get('/api/users')
-      const userData = response.data
-      
-      // Handle different response formats
-      let usersArray: User[] = []
-      if (Array.isArray(userData)) {
-        usersArray = userData
-      } else if (userData && Array.isArray(userData.items)) {
-        usersArray = userData.items
-      } else if (userData && typeof userData === 'object') {
-        // Try to extract users from object values
-        const possibleUsers = Object.values(userData).filter(item => 
-          item && typeof item === 'object' && 'id' in item && 'email' in item
-        )
-        usersArray = possibleUsers as User[]
-      }
-
-      // Ensure all users have required properties
-      const normalizedUsers = usersArray.map(user => ({
-        id: user.id || '',
-        email: user.email || '',
-        firstName: user.firstName || '',
-        lastName: user.lastName || '',
-        roles: Array.isArray(user.roles) ? user.roles : (user.roles ? [String(user.roles)] : ['Borrower']),
-        dateCreated: user.dateCreated || new Date().toISOString(),
-        isActive: user.isActive !== undefined ? user.isActive : true
-      }))
-
-      setUsers(normalizedUsers)
-    } catch (error: any) {
-      console.error('Failed to fetch users', error)
-      setSnackbar({
-        open: true,
-        message: `Failed to load users: ${error.response?.data?.error || error.message || 'Unknown error'}`,
-        severity: 'error'
-      })
-      setUsers([])
-    } finally {
-      setLoading(false)
-    }
+  const handleSnackbarClose = () => {
+    setSnackbar(prev => ({ ...prev, open: false }))
   }
 
-  const fetchSettings = async () => {
-    try {
-      const resp = await axios.get('/api/settings/lendingrules')
-      const r = resp.data || {}
-      setLendingRules(r)
-
-      const defaultInterestRate = r?.interestRates?.baseRates?.mediumLoanBase ?? settings.defaultInterestRate
-      const autoApprovalThreshold = r?.autoApproval?.maxAutoApprovalAmount ?? settings.autoApprovalThreshold
-      const latePaymentFeeRate = r?.fees?.monthlyServiceFee ?? settings.latePaymentFeeRate
-
-      setSettings(prev => ({
-        ...prev,
-        defaultInterestRate: Number(defaultInterestRate) || prev.defaultInterestRate,
-        autoApprovalThreshold: Number(autoApprovalThreshold) || prev.autoApprovalThreshold,
-        latePaymentFeeRate: Number(latePaymentFeeRate) || prev.latePaymentFeeRate
-      }))
-    } catch (error) {
-      console.error('Failed to fetch lending rules', error)
+  const handleUserDialogOpen = (user?: User) => {
+    if (user) {
+      setSelectedUser(user)
+    } else {
+      setSelectedUser({})
     }
+    setUserDialogOpen(true)
   }
 
-  const fetchPersistedSystemSettings = async () => {
-    try {
-      const resp = await axios.get('/api/systemsettings')
-      const data: PersistedSystemSettings = resp.data
-      setSettings(prev => ({
-        ...prev,
-        maxLoanAmount: data.maxLoanAmount || prev.maxLoanAmount,
-        maxLoanTerm: data.maxLoanTermMonths || prev.maxLoanTerm
-      }))
-      setMaxLoanAmountInput(String(data.maxLoanAmount || 1000000))
-      setMaxLoanTermInput(String(data.maxLoanTermMonths || 60))
-      setSmallLoanBaseRateInput(String(data.smallLoanBaseRate || 27.5))
-      setMediumLoanBaseRateInput(String(data.mediumLoanBaseRate || 24.0))
-      setLargeLoanBaseRateInput(String(data.largeLoanBaseRate || 22.0))
-      setMinInterestRateInput(String(data.minimumInterestRate || 18.0))
-      setMaxInterestRateInput(String(data.maximumInterestRate || 27.5))
-      setPersistedSettingsMeta({ 
-        updatedAt: data.updatedAt, 
-        updatedByEmail: data.updatedByEmail 
-      })
-    } catch (e) {
-      console.error('Failed to load persisted system settings', e)
-    }
-  }
-
-  const fetchAnalytics = async () => {
-    try {
-      const resp = await axios.get('/api/reports/dashboard')
-      const dashboardData = resp.data || {}
-      
-      setAnalytics({
-        totalLoans: dashboardData.totalLoans || 0,
-        activeLoans: dashboardData.activeLoans || 0,
-        pendingLoans: 0,
-        totalRevenue: dashboardData.totalRepayments || 0
-      })
-      
-      try {
-        const loansResp = await axios.get('/api/loans/all')
-        const loansData = loansResp.data
-        let loans: any[] = []
-        
-        if (Array.isArray(loansData)) {
-          loans = loansData
-        } else if (loansData && Array.isArray(loansData.items)) {
-          loans = loansData.items
-        }
-        
-        const awaitingReviewCount = loans.filter((loan: any) => 
-          loan && (loan.status === 0 || loan.status === 1)
-        ).length
-        
-        setAnalytics(prev => prev ? { ...prev, pendingLoans: awaitingReviewCount } : null)
-      } catch (loansError) {
-        console.warn('Could not fetch loans for pending count:', loansError)
-      }
-    } catch (error) {
-      console.error('Failed to fetch analytics', error)
-      setAnalytics({
-        totalLoans: 0,
-        activeLoans: 0,
-        pendingLoans: 0,
-        totalRevenue: 0
-      })
-    }
+  const handleUserDialogClose = () => {
+    setUserDialogOpen(false)
   }
 
   const handleUserSave = async () => {
     try {
-      const isNewUser = !selectedUser.id
-      
-      if (!selectedUser.email || !selectedUser.firstName || !selectedUser.lastName || !selectedUser.roles || selectedUser.roles.length === 0) {
+      if (selectedUser.id) {
+        await axios.put(`/api/admin/users/${selectedUser.id}`, selectedUser)
         setSnackbar({
           open: true,
-          message: 'Please fill in all required fields',
-          severity: 'error'
-        })
-        return
-      }
-
-      if (isNewUser) {
-        await axios.post('/api/users', {
-          email: selectedUser.email,
-          firstName: selectedUser.firstName,
-          lastName: selectedUser.lastName,
-          password: 'DefaultPassword123!',
-          role: selectedUser.roles[0]
+          message: 'User updated successfully',
+          severity: 'success'
         })
       } else {
-        await axios.put(`/api/users/${selectedUser.id}`, {
-          firstName: selectedUser.firstName,
-          lastName: selectedUser.lastName,
-          email: selectedUser.email,
-          role: selectedUser.roles[0]
+        await axios.post('/api/admin/users', selectedUser)
+        setSnackbar({
+          open: true,
+          message: 'User created successfully',
+          severity: 'success'
         })
       }
-      
+
+      const res = await axios.get('/api/admin/users')
+      setUsers(res.data || [])
       setUserDialogOpen(false)
-      setSnackbar({
-        open: true,
-        message: isNewUser ? `User ${selectedUser.firstName} ${selectedUser.lastName} created successfully!` : `User ${selectedUser.firstName} ${selectedUser.lastName} updated successfully!`,
-        severity: 'success'
-      })
-      setSelectedUser({})
-      fetchUsers()
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save user', error)
       setSnackbar({
         open: true,
-        message: error.response?.data?.error || error.message || 'Failed to save user. Please try again.',
+        message: 'Failed to save user',
         severity: 'error'
       })
     }
   }
 
-  const confirmDeleteUser = (user: User) => {
+  const handleUserDeleteClick = (user: User) => {
     setUserPendingDelete(user)
     setDeleteConfirmOpen(true)
   }
 
-  const handlePerformDelete = async () => {
+  const handleUserDeleteConfirm = async () => {
     if (!userPendingDelete) return
     try {
-      await axios.delete(`/api/users/${userPendingDelete.id}`)
+      await axios.delete(`/api/admin/users/${userPendingDelete.id}`)
       setSnackbar({
         open: true,
-        message: `User ${userPendingDelete.firstName} ${userPendingDelete.lastName} deleted successfully`,
-        severity: 'warning'
+        message: 'User deleted successfully',
+        severity: 'success'
       })
-      setDeleteConfirmOpen(false)
-      setUserPendingDelete(null)
-      fetchUsers()
-    } catch (error: any) {
+      setUsers(prev => prev.filter(u => u.id !== userPendingDelete.id))
+    } catch (error) {
       console.error('Failed to delete user', error)
       setSnackbar({
         open: true,
-        message: error.response?.data?.error || error.message || 'Failed to delete user. Please try again.',
+        message: 'Failed to delete user',
+        severity: 'error'
+      })
+    } finally {
+      setDeleteConfirmOpen(false)
+      setUserPendingDelete(null)
+    }
+  }
+
+  const handleSettingsChange = (field: keyof SystemSettings, value: any) => {
+    setSettings(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const handleSettingsSave = async () => {
+    try {
+      await axios.post('/api/admin/system-settings', settings)
+      setSnackbar({
+        open: true,
+        message: 'System settings saved',
+        severity: 'success'
+      })
+    } catch (error) {
+      console.error('Failed to save system settings', error)
+      setSnackbar({
+        open: true,
+        message: 'Failed to save system settings',
         severity: 'error'
       })
     }
   }
 
-  const handleSettingsSave = async () => {
+  const handleLendingRulesSave = async () => {
     try {
-      const amountNum = Number((maxLoanAmountInput || '').toString().replace(/[^0-9.]/g, ''))
-      const termNum = Number((maxLoanTermInput || '').toString().replace(/[^0-9]/g, ''))
-      const smallRate = Number((smallLoanBaseRateInput || '').toString().replace(/[^0-9.]/g, ''))
-      const mediumRate = Number((mediumLoanBaseRateInput || '').toString().replace(/[^0-9.]/g, ''))
-      const largeRate = Number((largeLoanBaseRateInput || '').toString().replace(/[^0-9.]/g, ''))
-      const minRate = Number((minInterestRateInput || '').toString().replace(/[^0-9.]/g, ''))
-      const maxRate = Number((maxInterestRateInput || '').toString().replace(/[^0-9.]/g, ''))
-
       const payload = {
-        maxLoanAmount: isNaN(amountNum) ? settings.maxLoanAmount : amountNum,
-        maxLoanTermMonths: isNaN(termNum) ? settings.maxLoanTerm : termNum,
-        smallLoanBaseRate: isNaN(smallRate) ? 27.5 : smallRate,
-        mediumLoanBaseRate: isNaN(mediumRate) ? 24.0 : mediumRate,
-        largeLoanBaseRate: isNaN(largeRate) ? 22.0 : largeRate,
-        minimumInterestRate: isNaN(minRate) ? 18.0 : minRate,
-        maximumInterestRate: isNaN(maxRate) ? 27.5 : maxRate
+        maxLoanAmount: parseFloat(maxLoanAmountInput || '0'),
+        maxLoanTermMonths: parseInt(maxLoanTermInput || '0', 10),
+        smallLoanBaseRate: parseFloat(smallLoanBaseRateInput || '0'),
+        mediumLoanBaseRate: parseFloat(mediumLoanBaseRateInput || '0'),
+        largeLoanBaseRate: parseFloat(largeLoanBaseRateInput || '0'),
+        minimumInterestRate: parseFloat(minInterestRateInput || '0'),
+        maximumInterestRate: parseFloat(maxInterestRateInput || '0')
       }
 
-      const resp = await axios.put('/api/systemsettings', payload)
-      const saved = resp.data as PersistedSystemSettings
-      setPersistedSettingsMeta({ 
-        updatedAt: saved.updatedAt, 
-        updatedByEmail: saved.updatedByEmail 
-      })
-      setSettings(prev => ({ 
-        ...prev, 
-        maxLoanAmount: saved.maxLoanAmount || prev.maxLoanAmount, 
-        maxLoanTerm: saved.maxLoanTermMonths || prev.maxLoanTerm 
-      }))
-      setMaxLoanAmountInput(String(saved.maxLoanAmount))
-      setMaxLoanTermInput(String(saved.maxLoanTermMonths))
-      setSmallLoanBaseRateInput(String(saved.smallLoanBaseRate))
-      setMediumLoanBaseRateInput(String(saved.mediumLoanBaseRate))
-      setLargeLoanBaseRateInput(String(saved.largeLoanBaseRate))
-      setMinInterestRateInput(String(saved.minimumInterestRate))
-      setMaxInterestRateInput(String(saved.maximumInterestRate))
-      setSnackbar({ 
-        open: true, 
-        message: 'Settings saved successfully! Interest rates updated.', 
-        severity: 'success' 
-      })
-    } catch (error:any) {
-      console.error('Failed to save settings', error)
-      setSnackbar({ 
-        open: true, 
-        message: error.response?.data?.error || error.message || 'Failed to save settings. Please try again.',
-        severity: 'error' 
-      })
-    }
-  }
+      await axios.post('/api/admin/lending-rules', payload)
 
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false })
-  }
+      setSnackbar({
+        open: true,
+        message: 'Lending rules saved',
+        severity: 'success'
+      })
 
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'Admin': return 'error'
-      case 'Borrower': return 'info'
-      default: return 'default'
+      const lendingRulesRes = await axios.get('/api/admin/lending-rules')
+      setLendingRules(lendingRulesRes.data)
+    } catch (error) {
+      console.error('Failed to save lending rules', error)
+      setSnackbar({
+        open: true,
+        message: 'Failed to save lending rules',
+        severity: 'error'
+      })
     }
   }
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
         <CircularProgress />
-        <Typography variant="h6" sx={{ ml: 2 }}>Loading admin panel...</Typography>
       </Box>
     )
   }
@@ -454,80 +345,69 @@ const EnhancedAdminPanel: React.FC = () => {
                 </Box>
                 <Typography variant="h4">{users.length}</Typography>
                 <Typography variant="body2" color="textSecondary">
-                  Active system users
+                  Active user accounts
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
+
           <Grid item xs={12} sm={6} md={3}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <AccountBalance sx={{ mr: 1, color: 'success.main' }} />
-                  <Typography variant="h6">Active Loans</Typography>
+                  <TrendingUp sx={{ mr: 1, color: 'success.main' }} />
+                  <Typography variant="h6">Default Interest Rate</Typography>
                 </Box>
-                <Typography variant="h4">{analytics?.activeLoans || 0}</Typography>
+                <Typography variant="h4">{settings.defaultInterestRate}%</Typography>
                 <Typography variant="body2" color="textSecondary">
-                  Currently active loans
+                  Applied when no risk adjustments
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
+
           <Grid item xs={12} sm={6} md={3}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Assessment sx={{ mr: 1, color: 'info.main' }} />
-                  <Typography variant="h6">Pending Review</Typography>
+                  <AccountBalance sx={{ mr: 1, color: 'warning.main' }} />
+                  <Typography variant="h6">Max Loan Amount</Typography>
                 </Box>
-                <Typography variant="h4">{analytics?.pendingLoans || 0}</Typography>
+                <Typography variant="h4">R{settings.maxLoanAmount.toLocaleString()}</Typography>
                 <Typography variant="body2" color="textSecondary">
-                  Applications awaiting approval
+                  Current system-wide limit
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
+
           <Grid item xs={12} sm={6} md={3}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <TrendingUp sx={{ mr: 1, color: 'warning.main' }} />
-                  <Typography variant="h6">Total Revenue</Typography>
+                  <AccountBalance sx={{ mr: 1, color: 'info.main' }} />
+                  <Typography variant="h6">Max Loan Term</Typography>
                 </Box>
-                <Typography variant="h4" color="primary.main">
-                  R{analytics?.totalRevenue ? analytics.totalRevenue.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-                </Typography>
+                <Typography variant="h4">{settings.maxLoanTerm} months</Typography>
                 <Typography variant="body2" color="textSecondary">
-                  Total repayments collected
+                  Longest repayment period
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
         </Grid>
-
-        <Box sx={{ mt: 4 }}>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            <Typography variant="h6">System Status</Typography>
-            <Typography>
-              {analytics?.totalLoans || 0} total loans processed | {analytics?.activeLoans || 0} currently active | {analytics?.pendingLoans || 0} awaiting review
-            </Typography>
-          </Alert>
-        </Box>
       </TabPanel>
 
       {/* User Management Tab */}
       <TabPanel value={tabValue} index={1}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
           <Typography variant="h5">User Management</Typography>
           <Button
             variant="contained"
             startIcon={<PersonAdd />}
-            onClick={() => {
-              setSelectedUser({})
-              setUserDialogOpen(true)
-            }}
+            onClick={() => handleUserDialogOpen()}
           >
-            Add New User
+            Add User
           </Button>
         </Box>
 
@@ -535,37 +415,31 @@ const EnhancedAdminPanel: React.FC = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell><strong>Name</strong></TableCell>
-                <TableCell><strong>Email</strong></TableCell>
-                <TableCell><strong>Roles</strong></TableCell>
-                <TableCell><strong>Created</strong></TableCell>
-                <TableCell><strong>Status</strong></TableCell>
-                <TableCell><strong>Actions</strong></TableCell>
+                <TableCell>Email</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Role</TableCell>
+                <TableCell>Date Created</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {users.map((user) => (
+              {users.map(user => (
                 <TableRow key={user.id}>
-                  <TableCell>
-                    <Typography fontWeight="bold">
-                      {user.firstName} {user.lastName}
-                    </Typography>
-                  </TableCell>
                   <TableCell>{user.email}</TableCell>
+                  <TableCell>{`${user.firstName} ${user.lastName}`}</TableCell>
                   <TableCell>
-                    {user.roles && user.roles.map((role) => (
+                    {user.roles.map(role => (
                       <Chip
                         key={role}
                         label={role}
-                        color={getRoleColor(role)}
                         size="small"
+                        color={role === 'Admin' ? 'primary' : 'default'}
                         sx={{ mr: 0.5 }}
                       />
                     ))}
                   </TableCell>
-                  <TableCell>
-                    {user.dateCreated ? new Date(user.dateCreated).toLocaleDateString() : 'Unknown'}
-                  </TableCell>
+                  <TableCell>{new Date(user.dateCreated).toLocaleString()}</TableCell>
                   <TableCell>
                     <Chip
                       label={user.isActive ? 'Active' : 'Inactive'}
@@ -573,265 +447,140 @@ const EnhancedAdminPanel: React.FC = () => {
                       size="small"
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="right">
                     <Tooltip title="Edit User">
-                      <IconButton
-                        onClick={() => {
-                          setSelectedUser(user)
-                          setUserDialogOpen(true)
-                        }}
-                      >
+                      <IconButton onClick={() => handleUserDialogOpen(user)}>
                         <Edit />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete User">
-                      <IconButton 
-                        color="error"
-                        onClick={() => confirmDeleteUser(user)}
-                      >
+                      <IconButton color="error" onClick={() => handleUserDeleteClick(user)}>
                         <Delete />
                       </IconButton>
                     </Tooltip>
                   </TableCell>
                 </TableRow>
               ))}
+              {users.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    No users found
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>
-
-        {users.length === 0 && (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <People sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" color="textSecondary">
-              No users found
-            </Typography>
-            <Typography variant="body2" color="textSecondary">
-              Add users to manage system access
-            </Typography>
-          </Box>
-        )}
       </TabPanel>
 
-      {/* System Settings Tab - rest remains the same but with safer property access */}
+      {/* System Settings Tab */}
       <TabPanel value={tabValue} index={2}>
-        <Typography variant="h5" gutterBottom>System Settings</Typography>
-        
         <Grid container spacing={3}>
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>Notification Settings</Typography>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={settings.emailNotificationsEnabled}
-                      onChange={(e) => setSettings({
-                        ...settings,
-                        emailNotificationsEnabled: e.target.checked
-                      })}
-                    />
-                  }
-                  label="Enable Email Notifications"
-                />
-                <br />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={settings.smsNotificationsEnabled}
-                      onChange={(e) => setSettings({
-                        ...settings,
-                        smsNotificationsEnabled: e.target.checked
-                      })}
-                    />
-                  }
-                  label="Enable SMS Notifications"
-                />
+                <Typography variant="h6">General Settings</Typography>
+                <Box sx={{ mt: 2 }}>
+                  <TextField
+                    fullWidth
+                    label="Default Interest Rate (%)"
+                    type="number"
+                    value={settings.defaultInterestRate}
+                    onChange={(e) => handleSettingsChange('defaultInterestRate', Number(e.target.value))}
+                    sx={{ mb: 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Max Loan Amount"
+                    type="number"
+                    value={settings.maxLoanAmount}
+                    onChange={(e) => handleSettingsChange('maxLoanAmount', Number(e.target.value))}
+                    sx={{ mb: 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Max Loan Term (months)"
+                    type="number"
+                    value={settings.maxLoanTerm}
+                    onChange={(e) => handleSettingsChange('maxLoanTerm', Number(e.target.value))}
+                    sx={{ mb: 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Auto-Approval Threshold (R)"
+                    type="number"
+                    value={settings.autoApprovalThreshold}
+                    onChange={(e) => handleSettingsChange('autoApprovalThreshold', Number(e.target.value))}
+                    sx={{ mb: 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Late Payment Fee Rate (%)"
+                    type="number"
+                    value={settings.latePaymentFeeRate}
+                    onChange={(e) => handleSettingsChange('latePaymentFeeRate', Number(e.target.value))}
+                    sx={{ mb: 2 }}
+                  />
+                </Box>
               </CardContent>
             </Card>
           </Grid>
-          
+
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom>System Limits</Typography>
-                <TextField
-                  fullWidth
-                  label="Maximum Loan Amount (R)"
-                  type="text"
-                  value={maxLoanAmountInput}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    if (/^\d*$/.test(v)) {
-                      setMaxLoanAmountInput(v)
-                      if (v !== '') setSettings(prev => ({ ...prev, maxLoanAmount: Number(v) }))
+                <Typography variant="h6">Notifications</Typography>
+                <Box sx={{ mt: 2 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={settings.emailNotificationsEnabled}
+                        onChange={(e) => handleSettingsChange('emailNotificationsEnabled', e.target.checked)}
+                      />
                     }
-                  }}
-                  onBlur={() => {
-                    if (maxLoanAmountInput === '') {
-                      setMaxLoanAmountInput(String(settings.maxLoanAmount))
-                    } else {
-                      setMaxLoanAmountInput(String(Number(maxLoanAmountInput)))
+                    label="Email Notifications"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={settings.smsNotificationsEnabled}
+                        onChange={(e) => handleSettingsChange('smsNotificationsEnabled', e.target.checked)}
+                      />
                     }
-                  }}
-                  sx={{ mb: 2 }}
-                />
-                <TextField
-                  fullWidth
-                  label="Maximum Loan Term (months)"
-                  type="text"
-                  value={maxLoanTermInput}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    if (/^\d*$/.test(v)) {
-                      setMaxLoanTermInput(v)
-                      if (v !== '') setSettings(prev => ({ ...prev, maxLoanTerm: Number(v) }))
-                    }
-                  }}
-                  onBlur={() => {
-                    if (maxLoanTermInput === '') {
-                      setMaxLoanTermInput(String(settings.maxLoanTerm))
-                    } else {
-                      setMaxLoanTermInput(String(Number(maxLoanTermInput)))
-                    }
-                  }}
-                />
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>Base Interest Rates (% per annum)</Typography>
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  These base rates are used for loan calculations. Changes will apply to new loan applications immediately.
-                </Alert>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={4}>
-                    <TextField
-                      fullWidth
-                      label="Small Loan Base Rate (%)"
-                      type="text"
-                      value={smallLoanBaseRateInput}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (/^\d*\.?\d*$/.test(v)) setSmallLoanBaseRateInput(v)
-                      }}
-                      onBlur={() => {
-                        if (smallLoanBaseRateInput === '') setSmallLoanBaseRateInput('27.5')
-                      }}
-                      helperText="For loans ? R8,000"
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField
-                      fullWidth
-                      label="Medium Loan Base Rate (%)"
-                      type="text"
-                      value={mediumLoanBaseRateInput}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (/^\d*\.?\d*$/.test(v)) setMediumLoanBaseRateInput(v)
-                      }}
-                      onBlur={() => {
-                        if (mediumLoanBaseRateInput === '') setMediumLoanBaseRateInput('24.0')
-                      }}
-                      helperText="For loans R8,001 - R30,000"
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <TextField
-                      fullWidth
-                      label="Large Loan Base Rate (%)"
-                      type="text"
-                      value={largeLoanBaseRateInput}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (/^\d*\.?\d*$/.test(v)) setLargeLoanBaseRateInput(v)
-                      }}
-                      onBlur={() => {
-                        if (largeLoanBaseRateInput === '') setLargeLoanBaseRateInput('22.0')
-                      }}
-                      helperText="For loans > R30,000"
-                    />
-                  </Grid>
-                </Grid>
-
-                <Divider sx={{ my: 3 }} />
-
-                <Typography variant="subtitle1" gutterBottom>Interest Rate Limits</Typography>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Minimum Interest Rate (%)"
-                      type="text"
-                      value={minInterestRateInput}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (/^\d*\.?\d*$/.test(v)) setMinInterestRateInput(v)
-                      }}
-                      onBlur={() => {
-                        if (minInterestRateInput === '') setMinInterestRateInput('18.0')
-                      }}
-                      helperText="Floor rate after adjustments"
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      label="Maximum Interest Rate (%)"
-                      type="text"
-                      value={maxInterestRateInput}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (/^\d*\.?\d*$/.test(v)) setMaxInterestRateInput(v)
-                      }}
-                      onBlur={() => {
-                        if (maxInterestRateInput === '') setMaxInterestRateInput('27.5')
-                      }}
-                      helperText="Cap rate (NCA compliant max)"
-                    />
-                  </Grid>
-                </Grid>
+                    label="SMS Notifications"
+                  />
+                </Box>
               </CardContent>
             </Card>
           </Grid>
         </Grid>
 
-        <Box sx={{ mt: 2 }}>
-          {persistedSettingsMeta.updatedAt && (
-            <Alert severity="info" sx={{ mb:2 }}>
-              Last updated: {new Date(persistedSettingsMeta.updatedAt).toLocaleString()} by {persistedSettingsMeta.updatedByEmail || 'Unknown'}
-            </Alert>
-          )}
-        </Box>
-
         <Box sx={{ mt: 3 }}>
-          <Button
-            variant="contained"
-            onClick={handleSettingsSave}
-            size="large"
-          >
+          <Button variant="contained" color="primary" onClick={handleSettingsSave}>
             Save Settings
           </Button>
         </Box>
       </TabPanel>
 
-      {/* Lending Rules Tab - with safer property access */}
+      {/* Lending Rules Tab */}
       <TabPanel value={tabValue} index={3}>
-        <Typography variant="h5" gutterBottom>Lending Rules & Interest Rates (Read Only)</Typography>
-
-        {!lendingRules && (
-          <Alert severity="warning">Lending rules not loaded. Try refreshing the page.</Alert>
-        )}
-
-        {lendingRules && (
+        {lendingRules == null ? (
+          <Typography>Loading lending rules...</Typography>
+        ) : (
           <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  Lending Rules & Interest Rates (Read Only). For now, only basic limits & base rates
+                  can be adjusted below. Advanced rules are loaded from server configuration.
+                </Typography>
+              </Alert>
+            </Grid>
+
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6">Auto-Approval</Typography>
+                  <Typography variant="h6">Auto Approval Rules</Typography>
                   <List dense>
                     <ListItem>
                       <ListItemText primary="Enabled" secondary={String(lendingRules.autoApproval?.enabled ?? 'N/A')} />
@@ -850,6 +599,9 @@ const EnhancedAdminPanel: React.FC = () => {
                     </ListItem>
                     <ListItem>
                       <ListItemText primary="Require Document Verification" secondary={String(lendingRules.autoApproval?.requireDocumentVerification ?? 'N/A')} />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText primary="Require Credit Check" secondary={String(lendingRules.autoApproval?.requireCreditCheck ?? 'N/A')} />
                     </ListItem>
                   </List>
                 </CardContent>
@@ -877,26 +629,13 @@ const EnhancedAdminPanel: React.FC = () => {
                       <ListItemText primary="Credit Life Enabled" secondary={String(lendingRules.fees?.creditLife?.enabled ?? 'N/A')} />
                     </ListItem>
                     <ListItem>
+                      <ListItemText primary="Credit Life Required Above Amount" secondary={`R${lendingRules.fees?.creditLife?.requiredAboveAmount ?? 'N/A'}`} />
+                    </ListItem>
+                    <ListItem>
                       <ListItemText primary="Credit Life Monthly Rate (%)" secondary={lendingRules.fees?.creditLife?.monthlyRatePercentage ?? 'N/A'} />
                     </ListItem>
-                  </List>
-                </CardContent>
-              </Card>
-
-              <Box sx={{ height: 16 }} />
-
-              <Card>
-                <CardContent>
-                  <Typography variant="h6">Deposits</Typography>
-                  <List dense>
                     <ListItem>
-                      <ListItemText primary="Require Deposit" secondary={String(lendingRules.deposits?.requireDeposit ?? 'N/A')} />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemText primary="Minimum Deposit (%)" secondary={lendingRules.deposits?.minimumDepositPercent ?? 'N/A'} />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemText primary="Deposit Reduces Principal" secondary={String(lendingRules.deposits?.depositReducesPrincipal ?? 'N/A')} />
+                      <ListItemText primary="Minimum Life Cover Percent (%)" secondary={lendingRules.fees?.creditLife?.minimumCoverPercent ?? 'N/A'} />
                     </ListItem>
                   </List>
                 </CardContent>
@@ -924,16 +663,34 @@ const EnhancedAdminPanel: React.FC = () => {
                   <Typography variant="subtitle1">Risk Adjustments</Typography>
                   <List dense>
                     <ListItem>
-                      <ListItemText primary="Excellent (DTI, MinDisposable)" secondary={`${lendingRules.interestRates?.riskAdjustments?.excellentAffordability?.maxDTI ?? 'N/A'} / ${lendingRules.interestRates?.riskAdjustments?.excellentAffordability?.minDisposableIncome ?? 'N/A'} -> ${lendingRules.interestRates?.riskAdjustments?.excellentAffordability?.rateAdjustment ?? 'N/A'}`} />
+                      <ListItemText
+                        primary="Excellent (DTI, MinDisposable)"
+                        secondary={`${lendingRules.interestRates?.riskAdjustments?.excellentAffordability?.maxDTI ?? 'N/A'} / ${lendingRules.interestRates?.riskAdjustments?.excellentAffordability?.minDisposableIncome ?? 'N/A'} -> ${lendingRules.interestRates?.riskAdjustments?.excellentAffordability?.rateAdjustment ?? 'N/A'}`}
+                      />
                     </ListItem>
                     <ListItem>
-                      <ListItemText primary="Good" secondary={`${lendingRules.interestRates?.riskAdjustments?.goodAffordability?.maxDTI ?? 'N/A'} / ${lendingRules.interestRates?.riskAdjustments?.goodAffordability?.minDisposableIncome ?? 'N/A'} -> ${lendingRules.interestRates?.riskAdjustments?.goodAffordability?.rateAdjustment ?? 'N/A'}`} />
+                      <ListItemText
+                        primary="Good"
+                        secondary={`${lendingRules.interestRates?.riskAdjustments?.goodAffordability?.maxDTI ?? 'N/A'} / ${lendingRules.interestRates?.riskAdjustments?.goodAffordability?.minDisposableIncome ?? 'N/A'} -> ${lendingRules.interestRates?.riskAdjustments?.goodAffordability?.rateAdjustment ?? 'N/A'}`}
+                      />
                     </ListItem>
                     <ListItem>
-                      <ListItemText primary="Average" secondary={`${lendingRules.interestRates?.riskAdjustments?.averageAffordability?.maxDTI ?? 'N/A'} / ${lendingRules.interestRates?.riskAdjustments?.averageAffordability?.minDisposableIncome ?? 'N/A'} -> ${lendingRules.interestRates?.riskAdjustments?.averageAffordability?.rateAdjustment ?? 'N/A'}`} />
+                      <ListItemText
+                        primary="Average"
+                        secondary={`${lendingRules.interestRates?.riskAdjustments?.averageAffordability?.maxDTI ?? 'N/A'} / ${lendingRules.interestRates?.riskAdjustments?.averageAffordability?.minDisposableIncome ?? 'N/A'} -> ${lendingRules.interestRates?.riskAdjustments?.averageAffordability?.rateAdjustment ?? 'N/A'}`}
+                      />
                     </ListItem>
                     <ListItem>
-                      <ListItemText primary="Below Average" secondary={`${lendingRules.interestRules?.riskAdjustments?.belowAverageAffordability?.maxDTI ?? 'N/A'} / ${lendingRules.interestRates?.riskAdjustments?.belowAverageAffordability?.minDisposableIncome ?? 'N/A'} -> ${lendingRules.interestRates?.riskAdjustments?.belowAverageAffordability?.rateAdjustment ?? 'N/A'}`} />
+                      <ListItemText
+                        primary="Below Average"
+                        secondary={`${lendingRules.interestRates?.riskAdjustments?.belowAverageAffordability?.maxDTI ?? 'N/A'} / ${lendingRules.interestRates?.riskAdjustments?.belowAverageAffordability?.minDisposableIncome ?? 'N/A'} -> ${lendingRules.interestRates?.riskAdjustments?.belowAverageAffordability?.rateAdjustment ?? 'N/A'}`}
+                      />
+                    </ListItem>
+                    <ListItem>
+                      <ListItemText
+                        primary="Poor (Rate Adjustment Only)"
+                        secondary={`${lendingRules.interestRates?.riskAdjustments?.poorAffordability?.rateAdjustment ?? 'N/A'}`}
+                      />
                     </ListItem>
                   </List>
                 </CardContent>
@@ -946,13 +703,22 @@ const EnhancedAdminPanel: React.FC = () => {
                   <Typography variant="h6">Loan Terms</Typography>
                   <List dense>
                     <ListItem>
-                      <ListItemText primary="Small Loans (months)" secondary={`${lendingRules.loanTerms?.smallLoans?.minTermMonths ?? 'N/A'} - ${lendingRules.loanTerms?.smallLoans?.maxTermMonths ?? 'N/A'}`} />
+                      <ListItemText
+                        primary="Small Loans (months)"
+                        secondary={`${lendingRules.loanTerms?.smallLoans?.minTermMonths ?? 'N/A'} - ${lendingRules.loanTerms?.smallLoans?.maxTermMonths ?? 'N/A'}`}
+                      />
                     </ListItem>
                     <ListItem>
-                      <ListItemText primary="Medium Loans (months)" secondary={`${lendingRules.loanTerms?.mediumLoans?.minTermMonths ?? 'N/A'} - ${lendingRules.loanTerms?.mediumLoans?.maxTermMonths ?? 'N/A'}`} />
+                      <ListItemText
+                        primary="Medium Loans (months)"
+                        secondary={`${lendingRules.loanTerms?.mediumLoans?.minTermMonths ?? 'N/A'} - ${lendingRules.loanTerms?.mediumLoans?.maxTermMonths ?? 'N/A'}`}
+                      />
                     </ListItem>
                     <ListItem>
-                      <ListItemText primary="Large Loans (months)" secondary={`${lendingRules.loanTerms?.largeLoans?.minTermMonths ?? 'N/A'} - ${lendingRules.loanTerms?.largeLoans?.maxTermMonths ?? 'N/A'}`} />
+                      <ListItemText
+                        primary="Large Loans (months)"
+                        secondary={`${lendingRules.loanTerms?.largeLoans?.minTermMonths ?? 'N/A'} - ${lendingRules.loanTerms?.largeLoans?.maxTermMonths ?? 'N/A'}`}
+                      />
                     </ListItem>
                   </List>
                 </CardContent>
@@ -965,61 +731,219 @@ const EnhancedAdminPanel: React.FC = () => {
                   <Typography variant="h6">Affordability</Typography>
                   <List dense>
                     <ListItem>
-                      <ListItemText primary="Max DTI (%)" secondary={lendingRules.affordability?.maxDebtToIncomeRatio ?? 'N/A'} />
+                      <ListItemText
+                        primary="Max DTI (%)"
+                        secondary={lendingRules.affordability?.maxDebtToIncomeRatio ?? 'N/A'}
+                      />
                     </ListItem>
                     <ListItem>
-                      <ListItemText primary="Min Disposable After Loan (R)" secondary={lendingRules.affordability?.minimumDisposableIncomeAfterLoan ?? 'N/A'} />
+                      <ListItemText
+                        primary="Min Disposable After Loan (R)"
+                        secondary={lendingRules.affordability?.minimumDisposableIncomeAfterLoan ?? 'N/A'}
+                      />
                     </ListItem>
                     <ListItem>
-                      <ListItemText primary="Min Residual Amount (R)" secondary={lendingRules.affordability?.minimumResidualAmount ?? 'N/A'} />
+                      <ListItemText
+                        primary="Min Residual Amount (R)"
+                        secondary={lendingRules.affordability?.minimumResidualAmount ?? 'N/A'}
+                      />
                     </ListItem>
                     <ListItem>
-                      <ListItemText primary="Min Reserve Percent (%)" secondary={lendingRules.affordability?.minimumReservePercent ?? 'N/A'} />
+                      <ListItemText
+                        primary="Min Reserve Percent (%)"
+                        secondary={lendingRules.affordability?.minimumReservePercent ?? 'N/A'}
+                      />
                     </ListItem>
                   </List>
                 </CardContent>
               </Card>
 
               <Box sx={{ mt: 2 }}>
-                <Button variant="outlined" onClick={() => setJsonDialogOpen(true)}>View raw rules JSON</Button>
+                <Button variant="outlined" onClick={() => setJsonDialogOpen(true)}>
+                  View raw rules JSON
+                </Button>
               </Box>
             </Grid>
           </Grid>
         )}
 
         <Box sx={{ mt: 3 }}>
-          <Alert severity="info">This page is read-only. Lending rules are defined in the server configuration and code. To change the rules, update the server configuration and restart the application (or use the server-side settings API if implemented).</Alert>
-        </Box>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Editable Lending Limits & Base Rates
+              </Typography>
+              <Typography variant="body2" color="textSecondary" gutterBottom>
+                These settings control high-level lending limits and base rates. Detailed risk rules
+                remain configured on the server.
+              </Typography>
 
-        <Dialog open={jsonDialogOpen} onClose={() => setJsonDialogOpen(false)} fullWidth maxWidth="lg">
-          <DialogTitle>Raw Lending Rules JSON</DialogTitle>
-          <DialogContent>
-            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(lendingRules, null, 2)}</pre>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setJsonDialogOpen(false)}>Close</Button>
-          </DialogActions>
-        </Dialog>
+              <Grid container spacing={2} sx={{ mt: 1 }}>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Max Loan Amount (R)"
+                    type="text"
+                    value={maxLoanAmountInput}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (/^\d*$/.test(v)) setMaxLoanAmountInput(v)
+                    }}
+                    onBlur={() => {
+                      if (maxLoanAmountInput === '') setMaxLoanAmountInput((persistedSettingsMeta as any).maxLoanAmount?.toString() ?? '')
+                    }}
+                    helperText="System-wide hard cap"
+                    sx={{ mb: 2 }}
+                  />
+                  <TextField
+                    fullWidth
+                    label="Max Loan Term (months)"
+                    type="text"
+                    value={maxLoanTermInput}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (/^\d*$/.test(v)) setMaxLoanTermInput(v)
+                    }}
+                    onBlur={() => {
+                      if (maxLoanTermInput === '') setMaxLoanTermInput((persistedSettingsMeta as any).maxLoanTermMonths?.toString() ?? '')
+                    }}
+                    helperText="System-wide max term"
+                    sx={{ mb: 2 }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Base Interest Rates (per Category)
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="Small Loan Base Rate (%)"
+                        type="text"
+                        value={smallLoanBaseRateInput}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (/^\d*\.?\d*$/.test(v)) setSmallLoanBaseRateInput(v)
+                        }}
+                        onBlur={() => {
+                          if (smallLoanBaseRateInput === '') setSmallLoanBaseRateInput('27.5')
+                        }}
+                        helperText="For loans ≤ R8,000"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="Medium Loan Base Rate (%)"
+                        type="text"
+                        value={mediumLoanBaseRateInput}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (/^\d*\.?\d*$/.test(v)) setMediumLoanBaseRateInput(v)
+                        }}
+                        onBlur={() => {
+                          if (mediumLoanBaseRateInput === '') setMediumLoanBaseRateInput('24.0')
+                        }}
+                        helperText="For loans R8,001 - R30,000"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="Large Loan Base Rate (%)"
+                        type="text"
+                        value={largeLoanBaseRateInput}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (/^\d*\.?\d*$/.test(v)) setLargeLoanBaseRateInput(v)
+                        }}
+                        onBlur={() => {
+                          if (largeLoanBaseRateInput === '') setLargeLoanBaseRateInput('22.0')
+                        }}
+                        helperText="For loans > R30,000"
+                      />
+                    </Grid>
+                  </Grid>
+
+                  <Divider sx={{ my: 3 }} />
+
+                  <Typography variant="subtitle1" gutterBottom>
+                    Interest Rate Limits
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Minimum Interest Rate (%)"
+                        type="text"
+                        value={minInterestRateInput}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (/^\d*\.?\d*$/.test(v)) setMinInterestRateInput(v)
+                        }}
+                        onBlur={() => {
+                          if (minInterestRateInput === '') setMinInterestRateInput('18.0')
+                        }}
+                        helperText="Floor rate after adjustments"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Maximum Interest Rate (%)"
+                        type="text"
+                        value={maxInterestRateInput}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (/^\d*\.?\d*$/.test(v)) setMaxInterestRateInput(v)
+                        }}
+                        onBlur={() => {
+                          if (maxInterestRateInput === '') setMaxInterestRateInput('27.5')
+                        }}
+                        helperText="Cap rate (NCA compliant max)"
+                      />
+                    </Grid>
+                  </Grid>
+                </Grid>
+              </Grid>
+
+              <Box sx={{ mt: 2 }}>
+                {persistedSettingsMeta.updatedAt && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      Last updated: {new Date(persistedSettingsMeta.updatedAt).toLocaleString()} by{' '}
+                      {persistedSettingsMeta.updatedByEmail || 'system'}
+                    </Typography>
+                  </Alert>
+                )}
+
+                <Button variant="contained" color="primary" onClick={handleLendingRulesSave}>
+                  Save Lending Rules
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Box>
       </TabPanel>
 
       {/* User Dialog */}
-      <Dialog open={userDialogOpen} onClose={() => setUserDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {selectedUser.id ? 'Edit User' : 'Add New User'}
-        </DialogTitle>
+      <Dialog open={userDialogOpen} onClose={handleUserDialogClose} fullWidth maxWidth="sm">
+        <DialogTitle>{selectedUser.id ? 'Edit User' : 'Add User'}</DialogTitle>
         <DialogContent>
           <TextField
             fullWidth
             label="First Name"
             value={selectedUser.firstName || ''}
-            onChange={(e) => setSelectedUser({...selectedUser, firstName: e.target.value})}
+            onChange={(e) => setSelectedUser({ ...selectedUser, firstName: e.target.value })}
             sx={{ mt: 1, mb: 2 }}
           />
           <TextField
             fullWidth
             label="Last Name"
             value={selectedUser.lastName || ''}
-            onChange={(e) => setSelectedUser({...selectedUser, lastName: e.target.value})}
+            onChange={(e) => setSelectedUser({ ...selectedUser, lastName: e.target.value })}
             sx={{ mb: 2 }}
           />
           <TextField
@@ -1027,7 +951,7 @@ const EnhancedAdminPanel: React.FC = () => {
             label="Email"
             type="email"
             value={selectedUser.email || ''}
-            onChange={(e) => setSelectedUser({...selectedUser, email: e.target.value})}
+            onChange={(e) => setSelectedUser({ ...selectedUser, email: e.target.value })}
             sx={{ mb: 2 }}
           />
           <TextField
@@ -1035,61 +959,54 @@ const EnhancedAdminPanel: React.FC = () => {
             fullWidth
             label="Role"
             value={selectedUser.roles?.[0] || ''}
-            onChange={(e) => setSelectedUser({...selectedUser, roles: [e.target.value]})}
+            onChange={(e) => setSelectedUser({ ...selectedUser, roles: [e.target.value] })}
           >
-            <MenuItem value="Borrower">Borrower</MenuItem>
             <MenuItem value="Admin">Admin</MenuItem>
+            <MenuItem value="User">User</MenuItem>
           </TextField>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setUserDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleUserSave} variant="contained">
-            {selectedUser.id ? 'Update' : 'Create'} User
+          <Button onClick={handleUserDialogClose}>Cancel</Button>
+          <Button onClick={handleUserSave} variant="contained" color="primary">
+            Save
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteConfirmOpen}
-        onClose={() => { setDeleteConfirmOpen(false); setUserPendingDelete(null) }}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>Confirm User Deletion</DialogTitle>
+      {/* Delete Confirm Dialog */}
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+        <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
-          <Alert severity="warning" sx={{ mb:2 }}>
-            This action is permanent. Audit logs will record this deletion.
-          </Alert>
-          <Typography>
-            Are you sure you want to delete user <strong>{userPendingDelete?.firstName} {userPendingDelete?.lastName}</strong>?<br/>
-            Email: {userPendingDelete?.email}<br/>
-            Role(s): {userPendingDelete?.roles?.join(', ')}
-          </Typography>
+          Are you sure you want to delete user {userPendingDelete?.email}?
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setDeleteConfirmOpen(false); setUserPendingDelete(null) }}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={handlePerformDelete}>Delete User</Button>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+          <Button onClick={handleUserDeleteConfirm} color="error" variant="contained">
+            Delete
+          </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar Notification */}
+      {/* JSON View Dialog */}
+      <Dialog open={jsonDialogOpen} onClose={() => setJsonDialogOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Raw Lending Rules JSON</DialogTitle>
+        <DialogContent>
+          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {JSON.stringify(lendingRules, null, 2)}
+          </pre>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setJsonDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        onClose={handleSnackbarClose}
       >
-        <AlertComponent 
-          onClose={handleCloseSnackbar} 
-          severity={snackbar.severity}
-          sx={{ 
-            width: '100%',
-            fontSize: '1.1rem',
-            fontWeight: 'bold',
-            boxShadow: 3
-          }}
-        >
+        <AlertComponent onClose={handleSnackbarClose} severity={snackbar.severity}>
           {snackbar.message}
         </AlertComponent>
       </Snackbar>
