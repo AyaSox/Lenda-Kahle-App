@@ -120,12 +120,6 @@ Frontend
 
 ---
 
-## License
-
-MIT. See `LICENSE` if included in your repository.
-
----
-
 ## Roadmap (selected)
 
 - Email and SMS notifications
