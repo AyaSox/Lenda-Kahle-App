@@ -73,10 +73,26 @@ const normalizeText = (input: string) => {
   return text.trim()
 }
 
-// Simple SA date-time formatter (expects an ISO string; backend sends UTC)
-const formatSADateTime = (iso: string) => {
-  if (!iso) return ''
-  const date = new Date(iso.endsWith('Z') ? iso : iso + 'Z')
+// Simple SA date-time formatter (handles ISO strings with/without Z and Date objects)
+const formatSADateTime = (value: string | Date) => {
+  if (!value) return ''
+  let date: Date
+
+  if (value instanceof Date) {
+    date = value
+  } else {
+    let s = value.trim()
+    // If it already looks like it has a timezone, don't append Z
+    if (!s.endsWith('Z') && !s.includes('+')) {
+      // handle "YYYY-MM-DD HH:mm:ss" by converting space to T
+      s = s.replace(' ', 'T')
+      s += 'Z'
+    }
+    date = new Date(s)
+  }
+
+  if (isNaN(date.getTime())) return ''
+
   return date.toLocaleString('en-ZA', {
     year: 'numeric',
     month: '2-digit',
