@@ -17,25 +17,7 @@ Lenda Kahle is a complete, production‑ready micro‑lending platform featuring
 - Document verification and uploads
 - Admin dashboard and audit logging
 - Notifications (real-time + email)
-- In‑app assistant/chatbot (optional, client-side only)
-
----
-
-## Quick Start (Development)
-
-1. Backend
-   - Location: `LendaKahleApp.Server`
-   - Commands:
-     - `dotnet restore`
-     - `dotnet run`
-   - Default URL: `https://localhost:7176`
-
-2. Frontend
-   - Location: `lendakahleapp.client`
-   - Commands:
-     - `npm install`
-     - `npm run dev`
-   - Default URL: `http://localhost:5173`
+- In‑app assistant/chatbot
 
 ---
 
@@ -44,12 +26,7 @@ Lenda Kahle is a complete, production‑ready micro‑lending platform featuring
 - Frontend: Vercel
 - Backend: Render.com (Docker, .NET 8)
 - Database: Supabase PostgreSQL
-
-Documentation:
-- `DEPLOY.md` (quick steps)
-- `DEPLOYMENT_GUIDE_SPLIT_STACK.md` (complete guide)
-- `POSTGRESQL_MIGRATION_GUIDE.md` (database setup)
-
+  
 ---
 
 ## Key Features
@@ -96,18 +73,6 @@ Frontend
 - CORS configuration
 - Input validation and SQL‑injection‑safe ORM
 - Audit logging
-
----
-
-## Testing
-
-Backend
-- `cd LendaKahleApp.Server`
-- `dotnet test`
-
-Frontend
-- `cd lendakahleapp.client`
-- `npm test`
 
 ---
 
